@@ -170,6 +170,9 @@ const DataPortability = {
         dailyTarget: LS.get('daily_target', 4),
         studyLog: LS.get('study_log', []),
         theme: LS.get('theme', 'dark'),
+        shared_spaces: LS.get('shared_spaces', []),
+        friends: LS.get('friends', []),
+        friend_requests: LS.get('friend_requests', [])
       },
       filesMeta: FileMeta.getAll(),
       notes: notes.map(n => ({ ...n, id: n.localId }))
@@ -191,6 +194,9 @@ const DataPortability = {
     if (s.dailyTarget) LS.set('daily_target', s.dailyTarget);
     if (s.studyLog) LS.set('study_log', s.studyLog);
     if (s.theme) LS.set('theme', s.theme);
+    if (s.shared_spaces) LS.set('shared_spaces', s.shared_spaces);
+    if (s.friends) LS.set('friends', s.friends);
+    if (s.friend_requests) LS.set('friend_requests', s.friend_requests);
     if (data.filesMeta) LS.set('files_meta', data.filesMeta);
     if (data.notes) {
       for (const note of data.notes) {
@@ -203,6 +209,62 @@ const DataPortability = {
     LS.clearUser();
     await FileStore.clearUser();
     await NoteStore.clearUser();
+  }
+};
+
+/* ── Shared Spaces metadata ─────────────────────────── */
+const SharedMeta = {
+  getAll() { return LS.get('shared_spaces', []); },
+  getById(id) { return this.getAll().find(s => s.id === id) || null; },
+  save(space) {
+    const all = this.getAll().filter(s => s.id !== space.id);
+    all.push(space);
+    LS.set('shared_spaces', all);
+  },
+  delete(id) {
+    LS.set('shared_spaces', this.getAll().filter(s => s.id !== id));
+    // Delete folders (subjects) and files associated with this space
+    const folders = (LS.get('subjects', []) || []).filter(f => f.spaceId !== id);
+    LS.set('subjects', folders);
+    const files = FileMeta.getAll().filter(f => f.spaceId !== id);
+    LS.set('files_meta', files);
+  },
+  initDefaults() {
+    // Keep it clean - no pre-populated default data
+  }
+};
+
+/* ── Friends metadata ────────────────────────────────── */
+const FriendMeta = {
+  getAll() { return LS.get('friends', []); },
+  save(friend) {
+    const all = this.getAll().filter(f => f.email.toLowerCase() !== friend.email.toLowerCase());
+    all.push(friend);
+    LS.set('friends', all);
+  },
+  delete(email) {
+    LS.set('friends', this.getAll().filter(f => f.email.toLowerCase() !== email.toLowerCase()));
+  },
+  getRequests() { return LS.get('friend_requests', []); },
+  saveRequest(req) {
+    const all = this.getRequests().filter(r => r.email.toLowerCase() !== req.email.toLowerCase());
+    all.push(req);
+    LS.set('friend_requests', all);
+  },
+  deleteRequest(email) {
+    LS.set('friend_requests', this.getRequests().filter(r => r.email.toLowerCase() !== email.toLowerCase()));
+  },
+  getInvitations() { return LS.get('space_invitations', []); },
+  saveInvitation(inv) {
+    const all = this.getInvitations().filter(i => i.id !== inv.id);
+    all.push(inv);
+    LS.set('space_invitations', all);
+  },
+  deleteInvitation(id) {
+    LS.set('space_invitations', this.getInvitations().filter(i => i.id !== id));
+  },
+  initDefaults() {
+    // Keep it clean - no pre-populated default data
   }
 };
 

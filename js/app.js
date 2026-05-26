@@ -4,8 +4,8 @@
    ═══════════════════════════════════════════════════════ */
 
 const App = (() => {
-  const VIEWS = ['dashboard', 'library', 'notes', 'focus', 'schedule', 'settings'];
-  const TITLES = { dashboard:'Dashboard', library:'Library', notes:'Notes', focus:'Focus', schedule:'Schedule', settings:'Settings' };
+  const VIEWS = ['dashboard', 'library', 'notes', 'focus', 'schedule', 'settings', 'shared'];
+  const TITLES = { dashboard:'Dashboard', library:'Library', notes:'Notes', focus:'Focus', schedule:'Schedule', settings:'Settings', shared:'Shared Spaces' };
   let currentView = 'dashboard';
   let libFilter = 'all';
   let libGrid = true;
@@ -31,6 +31,7 @@ const App = (() => {
     if (view === 'notes') Notes.refresh();
     if (view === 'schedule') Timetable.init();
     if (view === 'focus') Pomodoro.renderBars();
+    if (view === 'shared') renderSharedView();
   }
 
   /* ── Sidebar mobile ──────────────────────────────────── */
@@ -93,7 +94,7 @@ const App = (() => {
   }
 
   function updateStats() {
-    const files = FileMeta.getAll();
+    const files = FileMeta.getAll().filter(f => !f.spaceId);
     const focusSecs = LS.get('total_focus_seconds', 0);
     const focusMins = Math.round(focusSecs / 60);
     const streak = calcStreak();
@@ -121,12 +122,12 @@ const App = (() => {
 
   function updateBadge() {
     const badge = document.getElementById('lib-badge');
-    if (badge) badge.textContent = FileMeta.getAll().length;
+    if (badge) badge.textContent = FileMeta.getAll().filter(f => !f.spaceId).length;
   }
 
   /* ── Subjects ────────────────────────────────────────── */
   function renderSubjects() {
-    const subjects = LS.get('subjects', []);
+    const subjects = LS.get('subjects', []).filter(s => !s.spaceId);
     const grid = document.getElementById('subjects-grid');
     const empty = document.getElementById('subject-empty');
     if (!grid) return;
@@ -141,7 +142,7 @@ const App = (() => {
     if (empty) empty.classList.add('hidden');
 
     grid.innerHTML = subjects.map(s => {
-      const count = FileMeta.getAll().filter(f => f.subjectId === s.id).length;
+      const count = FileMeta.getAll().filter(f => f.subjectId === s.id && !f.spaceId).length;
       return `
         <div class="subject-card" data-id="${s.id}" style="--card-color:${s.color};">
           <style>.subject-card[data-id="${s.id}"]::before{background:${s.color};}</style>
@@ -264,8 +265,8 @@ const App = (() => {
     const actionsBar = document.getElementById('subject-actions-bar');
     const filesTitle = document.getElementById('lib-files-title');
 
-    let allFiles = FileMeta.getAll();
-    let subjects = LS.get('subjects', []);
+    let allFiles = FileMeta.getAll().filter(f => !f.spaceId);
+    let subjects = LS.get('subjects', []).filter(s => !s.spaceId);
 
     // Bind breadcrumb home click
     const bHome = document.getElementById('breadcrumb-home');
@@ -293,6 +294,7 @@ const App = (() => {
       // Render Recently Uploaded Section
       if (libRecentGrid && !isFilteredOrSearched) {
         const recentFiles = FileMeta.getAll()
+          .filter(f => !f.spaceId)
           .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
           .slice(0, 3);
 
@@ -428,7 +430,7 @@ const App = (() => {
     });
 
     grid.innerHTML = sorted.map(s => {
-      const count = FileMeta.getAll().filter(f => f.subjectId === s.id).length;
+      const count = FileMeta.getAll().filter(f => f.subjectId === s.id && !f.spaceId).length;
       return `
         <div class="subject-folder-card" data-id="${s.id}" style="--card-color:${s.color};">
           <div class="folder-icon">${s.icon}</div>
@@ -691,11 +693,28 @@ const App = (() => {
     const subjectId = document.getElementById('upload-subject-select').value;
     const label = document.getElementById('upload-label-select').value;
 
+    const isShared = (currentView === 'shared' && currentSpaceId);
+
     for (const item of uploadQueue) {
       try {
         const id = Date.now().toString() + Math.random().toString(36).slice(2);
-        const meta = { id, name: item.name, type: item.type, subjectId, label, pinned: false,
-          uploadedAt: new Date().toISOString(), youtubeUrl: item.youtubeUrl || null, youtubeId: item.youtubeId || null, size: item.size || 0 };
+        const meta = { 
+          id, 
+          name: item.name, 
+          type: item.type, 
+          subjectId, 
+          label, 
+          pinned: false,
+          uploadedAt: new Date().toISOString(), 
+          youtubeUrl: item.youtubeUrl || null, 
+          youtubeId: item.youtubeId || null, 
+          size: item.size || 0 
+        };
+        
+        if (isShared) {
+          meta.spaceId = currentSpaceId;
+        }
+
         if (item.file) {
           const ab = await item.file.arrayBuffer();
           await FileStore.save({ id, data: ab });
@@ -709,8 +728,14 @@ const App = (() => {
     btn.disabled = false; btn.textContent = 'Upload all';
     const count = uploadQueue.length;
     closeUploadModal();
-    showToast(`${count} file${count > 1 ? 's' : ''} uploaded!`, 'success');
-    refreshDashboard(); renderLibrary(); updateBadge();
+    
+    if (isShared) {
+      showToast(`${count} file${count > 1 ? 's' : ''} uploaded to shared workspace!`, 'success');
+      renderSpaceDetail();
+    } else {
+      showToast(`${count} file${count > 1 ? 's' : ''} uploaded!`, 'success');
+      refreshDashboard(); renderLibrary(); updateBadge();
+    }
   }
 
   /* ── Subject modal ───────────────────────────────────── */
@@ -841,6 +866,674 @@ const App = (() => {
     });
   }
 
+  /* ── Shared Study Spaces logic ─────────────────────── */
+  let currentSpaceId = null;
+  let sharedActiveTab = 'spaces';
+  let selectedSpaceIcon = '👥';
+  let currentSharedSubjectId = null;
+
+  function renderSharedView() {
+    SharedMeta.initDefaults();
+    FriendMeta.initDefaults();
+
+    const spacesTab = document.getElementById('shared-tab-spaces');
+    const friendsTab = document.getElementById('shared-tab-friends');
+    const detailView = document.getElementById('shared-space-detail');
+
+    if (currentSpaceId) {
+      if (spacesTab) spacesTab.classList.add('hidden');
+      if (friendsTab) friendsTab.classList.add('hidden');
+      if (detailView) detailView.classList.remove('hidden');
+      renderSpaceDetail();
+    } else {
+      if (detailView) detailView.classList.add('hidden');
+      if (sharedActiveTab === 'spaces') {
+        if (spacesTab) spacesTab.classList.remove('hidden');
+        if (friendsTab) friendsTab.classList.add('hidden');
+        renderSharedSpacesGrid();
+      } else {
+        if (spacesTab) spacesTab.classList.add('hidden');
+        if (friendsTab) friendsTab.classList.remove('hidden');
+        renderFriendsTab();
+      }
+    }
+  }
+
+  function renderSharedSpacesGrid() {
+    const grid = document.getElementById('shared-spaces-grid');
+    const empty = document.getElementById('shared-spaces-empty');
+    if (!grid) return;
+
+    const spaces = SharedMeta.getAll();
+    if (spaces.length === 0) {
+      grid.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+
+    grid.innerHTML = spaces.map(s => {
+      const spaceFiles = FileMeta.getAll().filter(f => f.spaceId === s.id);
+      const spaceFolders = LS.get('subjects', []).filter(f => f.spaceId === s.id);
+      
+      const avatarsMarkup = s.members.slice(0, 3).map(m => {
+        const initial = m.avatar || (m.name ? m.name[0].toUpperCase() : '?');
+        return `<div class="member-avatar" title="${escapeHtml(m.name)}">${initial}</div>`;
+      }).join('');
+      
+      const remaining = s.members.length - 3;
+      const moreMarkup = remaining > 0 ? `<div class="member-avatar more" title="${remaining} more">+${remaining}</div>` : '';
+
+      return `
+        <div class="shared-space-card" data-id="${s.id}">
+          <div class="shared-space-card-top">
+            <div class="shared-space-card-icon">${s.icon || '👥'}</div>
+            <div style="flex: 1; min-width: 0;">
+              <div class="shared-space-card-name">${escapeHtml(s.name)}</div>
+              <div class="shared-space-card-desc">${escapeHtml(s.description || 'No description provided')}</div>
+            </div>
+          </div>
+          <div class="shared-space-card-bottom">
+            <div class="shared-space-card-stats">
+              📁 ${spaceFolders.length} folders · 📄 ${spaceFiles.length} files
+            </div>
+            <div class="member-avatars-row">
+              ${avatarsMarkup}
+              ${moreMarkup}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    grid.querySelectorAll('.shared-space-card').forEach(card => {
+      card.addEventListener('click', () => {
+        currentSpaceId = card.dataset.id;
+        currentSharedSubjectId = null;
+        renderSharedView();
+      });
+    });
+  }
+
+  function renderFriendsTab() {
+    const reqsList = document.getElementById('incoming-requests-list');
+    const reqsTitle = document.getElementById('incoming-requests-title');
+    const requests = FriendMeta.getRequests();
+    
+    if (reqsTitle) reqsTitle.textContent = `Friend Requests (${requests.length})`;
+    if (reqsList) {
+      if (requests.length === 0) {
+        reqsList.innerHTML = `<div style="font-size:0.78rem;color:var(--text-3);text-align:center;padding:12px;border:1px dashed var(--border);border-radius:var(--r-md);">No pending requests</div>`;
+      } else {
+        reqsList.innerHTML = requests.map(r => `
+          <div class="friend-req-item">
+            <div class="friend-item-info">
+              <div class="friend-item-avatar">${r.avatar || r.name[0].toUpperCase()}</div>
+              <div>
+                <div class="friend-item-name">${escapeHtml(r.name)}</div>
+                <div class="friend-item-email" style="font-size:0.7rem;">${escapeHtml(r.email)}</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:4px;">
+              <button class="btn-primary accept-request-btn" data-email="${r.email}" style="font-size:0.7rem;padding:3px 8px;">Accept</button>
+              <button class="btn-ghost reject-request-btn" data-email="${r.email}" style="font-size:0.7rem;padding:3px 8px;">Reject</button>
+            </div>
+          </div>`).join('');
+          
+        reqsList.querySelectorAll('.accept-request-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const email = btn.dataset.email;
+            const req = requests.find(r => r.email === email);
+            if (req) {
+              FriendMeta.save(req);
+              FriendMeta.deleteRequest(email);
+              showToast(`Accepted friend request from ${req.name}!`, 'success');
+              renderFriendsTab();
+            }
+          });
+        });
+        
+        reqsList.querySelectorAll('.reject-request-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const email = btn.dataset.email;
+            FriendMeta.deleteRequest(email);
+            showToast('Friend request rejected.', 'info');
+            renderFriendsTab();
+          });
+        });
+      }
+    }
+
+    const friendsList = document.getElementById('friends-list-container');
+    const friendsTitle = document.getElementById('friends-list-title');
+    const emptyState = document.getElementById('friends-empty');
+    const friends = FriendMeta.getAll();
+    
+    if (friendsTitle) friendsTitle.textContent = `Your Friends (${friends.length})`;
+    if (friendsList) {
+      if (friends.length === 0) {
+        friendsList.innerHTML = '';
+        if (emptyState) emptyState.classList.remove('hidden');
+      } else {
+        if (emptyState) emptyState.classList.add('hidden');
+        friendsList.innerHTML = friends.map(f => `
+          <div class="friend-list-item">
+            <div class="friend-item-info">
+              <div class="friend-item-avatar">${f.avatar || (f.name ? f.name[0].toUpperCase() : '👤')}</div>
+              <div>
+                <div class="friend-item-name">${escapeHtml(f.name)}</div>
+                <div class="friend-item-email">${escapeHtml(f.code || f.email)}</div>
+              </div>
+            </div>
+            <button class="btn-icon danger remove-friend-btn" data-email="${f.email}" title="Remove Friend">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>`).join('');
+          
+        friendsList.querySelectorAll('.remove-friend-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const email = btn.dataset.email;
+            const friend = friends.find(f => f.email === email);
+            if (friend && confirm(`Remove ${friend.name} from friends?`)) {
+              FriendMeta.delete(email);
+              showToast(`${friend.name} removed.`, 'info');
+              renderFriendsTab();
+            }
+          });
+        });
+      }
+    }
+
+    // Display and Copy My Friend Code
+    const myCodeText = document.getElementById('my-friend-code-text');
+    if (myCodeText) {
+      myCodeText.textContent = getMyFriendCode();
+    }
+    const copyBtn = document.getElementById('copy-friend-code-btn');
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(getMyFriendCode()).then(() => {
+          showToast('Friend code copied to clipboard!', 'success');
+        });
+      };
+    }
+  }
+
+  function renderSpaceDetail() {
+    const space = SharedMeta.getById(currentSpaceId);
+    if (!space) {
+      currentSpaceId = null;
+      renderSharedView();
+      return;
+    }
+
+    const sName = document.getElementById('shared-space-name-text');
+    const sIcon = document.getElementById('shared-space-icon');
+    const sDesc = document.getElementById('shared-space-desc');
+    if (sName) sName.textContent = space.name;
+    if (sIcon) sIcon.textContent = space.icon || '👥';
+    if (sDesc) sDesc.textContent = space.description || 'Collaborative workspace';
+
+    const membersList = document.getElementById('shared-space-members');
+    if (membersList) {
+      membersList.innerHTML = space.members.map(m => {
+        const initial = m.avatar || (m.name ? m.name[0].toUpperCase() : '?');
+        return `<div class="member-avatar" title="${escapeHtml(m.name)}">${initial}</div>`;
+      }).join('');
+    }
+
+    const folderGrid = document.getElementById('shared-folders-grid');
+    const folders = LS.get('subjects', []).filter(f => f.spaceId === currentSpaceId);
+    if (folderGrid) {
+      if (folders.length === 0) {
+        folderGrid.innerHTML = `
+          <div class="empty-state" style="grid-column:1/-1;padding:20px;background:var(--surface-2);border:1px dashed var(--border);box-shadow:none;">
+            <span style="font-size:1.5rem;">📁</span>
+            <h4 style="font-size:0.82rem;margin-bottom:2px;">No shared folders</h4>
+            <p style="font-size:0.72rem;color:var(--text-3);">Create a folder to group related shared files together.</p>
+          </div>`;
+      } else {
+        folderGrid.innerHTML = folders.map(f => {
+          const filesCount = FileMeta.getAll().filter(doc => doc.subjectId === f.id && doc.spaceId === currentSpaceId).length;
+          const isActive = currentSharedSubjectId === f.id;
+          return `
+            <div class="subject-folder-card ${isActive ? 'active' : ''}" data-id="${f.id}" style="--card-color:${f.color}; padding: 12px 14px; display:flex; align-items:center; gap:10px; background:${isActive ? 'var(--primary-soft)' : 'var(--surface)'}; border: 1px solid ${isActive ? 'var(--primary)' : 'var(--border)'};">
+              <style>.subject-folder-card[data-id="${f.id}"]::before{background:${f.color};}</style>
+              <div class="folder-icon" style="font-size:1.25rem;">${f.icon}</div>
+              <div style="flex:1;min-width:0;">
+                <div class="folder-name" style="font-size:0.85rem;font-weight:700;">${escapeHtml(f.name)}</div>
+                <div style="font-size:0.7rem;color:var(--text-3);">${filesCount} file${filesCount !== 1 ? 's' : ''}</div>
+              </div>
+              <button class="btn-icon danger del-shared-folder" data-id="${f.id}" title="Delete" style="width:24px;height:24px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+              </button>
+            </div>`;
+        }).join('');
+
+        folderGrid.querySelectorAll('.subject-folder-card').forEach(card => {
+          card.addEventListener('click', e => {
+            if (e.target.closest('.del-shared-folder')) return;
+            const fid = card.dataset.id;
+            currentSharedSubjectId = currentSharedSubjectId === fid ? null : fid;
+            renderSpaceDetail();
+          });
+        });
+
+        folderGrid.querySelectorAll('.del-shared-folder').forEach(btn => {
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (confirm('Delete this folder? Files will remain in the workspace.')) {
+              const allSubj = LS.get('subjects', []).filter(s => s.id !== btn.dataset.id);
+              LS.set('subjects', allSubj);
+              if (currentSharedSubjectId === btn.dataset.id) currentSharedSubjectId = null;
+              showToast('Folder deleted.', 'info');
+              renderSpaceDetail();
+            }
+          });
+        });
+      }
+    }
+
+    const filesGrid = document.getElementById('shared-space-files-grid');
+    const filesEmpty = document.getElementById('shared-space-files-empty');
+    let spaceFiles = FileMeta.getAll().filter(f => f.spaceId === currentSpaceId);
+
+    if (currentSharedSubjectId) {
+      spaceFiles = spaceFiles.filter(f => f.subjectId === currentSharedSubjectId);
+      const activeFolder = folders.find(f => f.id === currentSharedSubjectId);
+      document.getElementById('shared-files-section-title').textContent = activeFolder 
+        ? `Files in ${activeFolder.icon} ${activeFolder.name}`
+        : 'Shared Files';
+    } else {
+      document.getElementById('shared-files-section-title').textContent = 'All Shared Files';
+    }
+
+    if (filesGrid) {
+      if (spaceFiles.length === 0) {
+        filesGrid.innerHTML = '';
+        filesGrid.classList.add('hidden');
+        if (filesEmpty) filesEmpty.classList.remove('hidden');
+      } else {
+        filesGrid.classList.remove('hidden');
+        if (filesEmpty) filesEmpty.classList.add('hidden');
+        
+        filesGrid.innerHTML = spaceFiles.map(f => {
+          const color = getFileColor(f.type);
+          const isYt = f.type === 'youtube';
+          const folder = folders.find(fd => fd.id === f.subjectId);
+          return `
+            <div class="lib-card" data-id="${f.id}">
+              <div class="lib-card-actions">
+                <button class="btn-icon danger lib-del-btn" data-id="${f.id}" title="Delete">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+                </button>
+              </div>
+              ${isYt ? `
+                <div class="lib-card-yt-badge">
+                  <svg viewBox="0 0 24 24"><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>
+                </div>` : ''}
+              <div class="lib-card-icon" style="background:${color}15;">${getFileIcon(f.type)}</div>
+              <div class="lib-card-name">${escapeHtml(f.name)}</div>
+              <div class="lib-card-meta">
+                ${folder ? `${folder.icon} ${escapeHtml(folder.name)} · ` : ''}${f.type.toUpperCase()}<br>
+                ${formatDate(f.uploadedAt)}
+                ${f.label ? `<br><span class="file-label-tag label-${f.label}" style="margin-top:4px;display:inline-flex;">${getLabelIcon(f.label)} ${capitalizeFirst(f.label)}</span>` : ''}
+              </div>
+            </div>`;
+        }).join('');
+
+        filesGrid.querySelectorAll('[data-id]').forEach(card => {
+          card.addEventListener('click', e => {
+            if (e.target.closest('.lib-card-actions')) return;
+            Viewer.open(card.dataset.id);
+          });
+        });
+        
+        filesGrid.querySelectorAll('.lib-del-btn').forEach(btn => {
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const meta = FileMeta.getById(btn.dataset.id);
+            if (meta && confirm(`Delete "${meta.name}" from this shared workspace?`)) {
+              FileStore.delete(btn.dataset.id).then(() => {
+                FileMeta.delete(btn.dataset.id);
+                showToast(`"${meta.name}" deleted from workspace`, 'info');
+                renderSpaceDetail();
+              });
+            }
+          });
+        });
+      }
+    }
+  }
+
+  function initShared() {
+    document.querySelectorAll('.shared-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.shared-tab').forEach(t => {
+          t.classList.remove('active');
+          t.style.color = 'var(--text-3)';
+          t.style.borderBottomColor = 'transparent';
+        });
+        tab.classList.add('active');
+        tab.style.color = 'var(--primary)';
+        tab.style.borderBottomColor = 'var(--primary)';
+        sharedActiveTab = tab.dataset.tab;
+        currentSpaceId = null;
+        renderSharedView();
+      });
+    });
+
+    const createModal = document.getElementById('create-space-modal');
+    const joinModal = document.getElementById('join-space-modal');
+
+    const openCreate = () => {
+      document.getElementById('space-name-input').value = '';
+      document.getElementById('space-desc-input').value = '';
+      selectedSpaceIcon = '👥';
+      document.querySelectorAll('#create-space-modal .icon-swatch').forEach(s => s.classList.toggle('active', s.dataset.icon === selectedSpaceIcon));
+      
+      const checklist = document.getElementById('space-invite-friends-list');
+      if (checklist) {
+        const friends = FriendMeta.getAll();
+        if (friends.length === 0) {
+          checklist.innerHTML = `<div style="font-size:0.75rem;color:var(--text-3);padding:4px;">No friends to invite yet. Add some in the Friends tab!</div>`;
+        } else {
+          checklist.innerHTML = friends.map((f, idx) => `
+            <label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;cursor:pointer;color:var(--text-2);">
+              <input type="checkbox" value="${escapeHtml(f.email)}" class="space-invite-friend-checkbox" />
+              <span>👤 ${escapeHtml(f.name)} (${escapeHtml(f.email)})</span>
+            </label>`).join('');
+        }
+      }
+
+      createModal.classList.remove('hidden');
+    };
+
+    const openJoin = () => {
+      document.getElementById('space-code-input').value = '';
+      
+      const pendingList = document.getElementById('pending-invitations-list');
+      if (pendingList) {
+        const invitations = FriendMeta.getInvitations();
+        if (invitations.length === 0) {
+          pendingList.innerHTML = `<div style="font-size:0.78rem;color:var(--text-3);text-align:center;padding:12px;border:1px dashed var(--border);border-radius:var(--r-md);width:100%;">No pending invitations</div>`;
+        } else {
+          pendingList.innerHTML = invitations.map(inv => `
+            <div class="friend-req-item" style="background:var(--surface);width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+              <div style="flex:1;">
+                <div style="font-size:0.85rem;font-weight:700;color:var(--text);">${escapeHtml(inv.name)}</div>
+                <div style="font-size:0.72rem;color:var(--text-3);">Invited by ${escapeHtml(inv.invitedBy)} (${escapeHtml(inv.email)})</div>
+              </div>
+              <button class="btn-primary accept-space-inv-btn" data-id="${inv.id}" style="font-size:0.7rem;padding:4px 8px;">Join</button>
+            </div>
+          `).join('');
+          
+          pendingList.querySelectorAll('.accept-space-inv-btn').forEach(btn => {
+            btn.onclick = () => {
+              const invId = btn.dataset.id;
+              const inv = invitations.find(i => i.id === invId);
+              if (inv) {
+                const newSpace = {
+                  id: inv.spaceId || ('space-' + Date.now()),
+                  name: inv.name,
+                  description: inv.description || 'Collaborative group',
+                  icon: inv.icon || '👥',
+                  members: [
+                    { name: 'You', avatar: 'Y' },
+                    { name: inv.invitedBy, avatar: inv.invitedBy[0].toUpperCase() }
+                  ],
+                  code: inv.code || (inv.name.slice(0, 4).toUpperCase() + '-' + Math.floor(100 + Math.random() * 900)),
+                  createdAt: new Date().toISOString()
+                };
+                SharedMeta.save(newSpace);
+                FriendMeta.deleteInvitation(invId);
+                joinModal.classList.add('hidden');
+                showToast(`Joined "${inv.name}"!`, 'success');
+                currentSpaceId = newSpace.id;
+                renderSharedView();
+              }
+            };
+          });
+        }
+      }
+
+      joinModal.classList.remove('hidden');
+    };
+
+    const addBtn1 = document.getElementById('shared-create-space-btn');
+    const addBtn2 = document.getElementById('create-first-space-btn');
+    if (addBtn1) addBtn1.onclick = openCreate;
+    if (addBtn2) addBtn2.onclick = openCreate;
+
+    const joinBtn = document.getElementById('shared-join-space-btn');
+    if (joinBtn) joinBtn.onclick = openJoin;
+
+    document.getElementById('create-space-close').onclick = () => createModal.classList.add('hidden');
+    document.getElementById('create-space-cancel').onclick = () => createModal.classList.add('hidden');
+    document.getElementById('create-space-confirm').onclick = handleCreateSpace;
+
+    // Backdrop click dismiss for modals
+    createModal.addEventListener('click', e => {
+      if (e.target === createModal) createModal.classList.add('hidden');
+    });
+    joinModal.addEventListener('click', e => {
+      if (e.target === joinModal) joinModal.classList.add('hidden');
+    });
+
+    document.querySelectorAll('#space-icon-picker .icon-swatch').forEach(s => {
+      s.addEventListener('click', () => {
+        document.querySelectorAll('#space-icon-picker .icon-swatch').forEach(x => x.classList.remove('active'));
+        s.classList.add('active');
+        selectedSpaceIcon = s.dataset.icon;
+      });
+    });
+
+    document.getElementById('join-space-close').onclick = () => joinModal.classList.add('hidden');
+    document.getElementById('join-space-cancel').onclick = () => joinModal.classList.add('hidden');
+    document.getElementById('join-space-confirm').onclick = handleJoinSpace;
+
+    document.getElementById('shared-space-back-btn').onclick = () => {
+      currentSpaceId = null;
+      currentSharedSubjectId = null;
+      renderSharedView();
+    };
+
+    document.getElementById('friend-send-request-btn').onclick = handleSendFriendRequest;
+
+    document.getElementById('shared-space-invite-btn').onclick = () => {
+      const space = SharedMeta.getById(currentSpaceId);
+      if (!space) return;
+      const friends = FriendMeta.getAll().filter(f => !space.members.some(m => m.name === f.name));
+      if (friends.length === 0) {
+        showToast('All your friends are already in this workspace, or you have no friends added yet!', 'info');
+        return;
+      }
+      const namesList = friends.map(f => f.name).join(', ');
+      const inviteName = prompt(`Invite a friend to this workspace (choose from: ${namesList}):`);
+      if (inviteName) {
+        const found = friends.find(f => f.name.toLowerCase() === inviteName.toLowerCase().trim());
+        if (found) {
+          space.members.push({ name: found.name, avatar: found.avatar || found.name[0].toUpperCase() });
+          SharedMeta.save(space);
+          showToast(`Invited ${found.name} to this workspace!`, 'success');
+          renderSpaceDetail();
+        } else {
+          showToast('Invalid friend name selected.', 'warning');
+        }
+      }
+    };
+
+    document.getElementById('shared-space-leave-btn').onclick = () => {
+      const space = SharedMeta.getById(currentSpaceId);
+      if (space && confirm(`Are you sure you want to leave "${space.name}"?`)) {
+        SharedMeta.delete(currentSpaceId);
+        currentSpaceId = null;
+        showToast(`Left workspace "${space.name}"`, 'info');
+        renderSharedView();
+      }
+    };
+
+    document.getElementById('shared-create-folder-btn').onclick = () => {
+      const folderName = prompt('Enter folder name:');
+      if (folderName && folderName.trim()) {
+        const subjects = LS.get('subjects', []);
+        const newFolder = {
+          id: 'shared-folder-' + Date.now(),
+          name: folderName.trim(),
+          color: '#8B5CF6',
+          icon: '📁',
+          spaceId: currentSpaceId
+        };
+        subjects.push(newFolder);
+        LS.set('subjects', subjects);
+        showToast(`Folder "${folderName}" created!`, 'success');
+        renderSpaceDetail();
+      }
+    };
+
+    document.getElementById('shared-upload-file-btn').onclick = () => {
+      uploadQueue = [];
+      renderQueue();
+      
+      // Refresh options to show current space subjects/folders
+      refreshSubjectSelects();
+      
+      // Auto-select the current active folder if one is clicked/active
+      if (currentSharedSubjectId) {
+        const select = document.getElementById('upload-subject-select');
+        if (select) select.value = currentSharedSubjectId;
+      }
+      
+      document.getElementById('upload-modal').classList.remove('hidden');
+    };
+  }
+
+  function handleCreateSpace() {
+    const name = document.getElementById('space-name-input').value.trim();
+    const desc = document.getElementById('space-desc-input').value.trim();
+    if (!name) {
+      showToast('Workspace name is required', 'warning');
+      return;
+    }
+
+    const members = [{ name: 'You', avatar: 'Y' }];
+    
+    document.querySelectorAll('.space-invite-friend-checkbox:checked').forEach(cb => {
+      const email = cb.value;
+      const friend = FriendMeta.getAll().find(f => f.email === email);
+      if (friend) {
+        const avatar = friend.avatar || (friend.name ? friend.name[0].toUpperCase() : '👤');
+        members.push({ name: friend.name, avatar });
+      }
+    });
+
+    const newSpace = {
+      id: 'space-' + Date.now(),
+      name,
+      description: desc || 'Collaborative group',
+      icon: selectedSpaceIcon,
+      members,
+      code: name.slice(0, 4).toUpperCase() + '-' + Math.floor(100 + Math.random() * 900),
+      createdAt: new Date().toISOString()
+    };
+
+    SharedMeta.save(newSpace);
+    document.getElementById('create-space-modal').classList.add('hidden');
+    showToast(`Shared space "${name}" created successfully!`, 'success');
+    currentSpaceId = newSpace.id;
+    renderSharedView();
+  }
+
+  function handleJoinSpace() {
+    const code = document.getElementById('space-code-input').value.trim().toUpperCase();
+    if (!code) {
+      showToast('Invite code is required', 'warning');
+      return;
+    }
+
+    if (code === 'DBMS-101' || code === 'AI-NETS' || code === 'JAVA-101') {
+      showToast('You are already a member of this workspace!', 'info');
+      return;
+    }
+
+    const mockName = code.split('-')[0] + ' Collaboration Group';
+    const joinedSpace = {
+      id: 'space-' + Date.now(),
+      name: mockName + ' 🚀',
+      description: 'Collaborative study space joined via code: ' + code,
+      icon: '🚀',
+      members: [
+        { name: 'You', avatar: 'Y' },
+        { name: 'Friend', avatar: 'F' }
+      ],
+      code,
+      createdAt: new Date().toISOString()
+    };
+
+    SharedMeta.save(joinedSpace);
+    document.getElementById('join-space-modal').classList.add('hidden');
+    showToast(`Joined workspace "${mockName}" via code!`, 'success');
+    currentSpaceId = joinedSpace.id;
+    renderSharedView();
+  }
+
+  function getMyFriendCode() {
+    const user = Auth.getCurrentUser();
+    if (!user) return 'OFFLINE-0000';
+    let hash = 0;
+    const str = user.id + user.email;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const codeNum = Math.abs(hash % 9000) + 1000;
+    const first = (user.name.split(' ')[0] || 'STUDENT').toUpperCase().replace(/[^A-Z]/g, '');
+    return `${first}-${codeNum}`;
+  }
+
+  function handleSendFriendRequest() {
+    const input = document.getElementById('friend-search-input');
+    const val = input.value.trim().toUpperCase();
+    if (!val) {
+      showToast('Please enter a friend code', 'warning');
+      return;
+    }
+
+    const match = val.match(/^([A-Z]+)-(\d{4})$/);
+    if (!match) {
+      showToast('Invalid format. Friend code must be in the format: NAME-1234 (e.g. ALICE-4521)', 'warning');
+      return;
+    }
+
+    const myCode = getMyFriendCode();
+    if (val === myCode) {
+      showToast('You cannot add your own friend code!', 'warning');
+      return;
+    }
+
+    const friends = FriendMeta.getAll();
+    if (friends.some(f => (f.code && f.code.toUpperCase() === val) || f.email.toLowerCase() === val.toLowerCase())) {
+      showToast('This user is already your friend!', 'info');
+      return;
+    }
+
+    showToast(`Friend request sent to code ${val}!`, 'success');
+    input.value = '';
+
+    setTimeout(() => {
+      const parsedName = match[1];
+      const newFriend = {
+        name: capitalizeFirst(parsedName.toLowerCase()),
+        email: parsedName.toLowerCase() + '@examos.com',
+        avatar: parsedName.slice(0, 2).toUpperCase(),
+        code: val
+      };
+      FriendMeta.save(newFriend);
+      showToast(`🎉 ${newFriend.name} accepted your friend request!`, 'success', 4500);
+      if (currentView === 'shared' && !currentSpaceId && sharedActiveTab === 'friends') {
+        renderFriendsTab();
+      }
+    }, 4000);
+  }
+
   let bootstrapped = false;
 
   async function bootstrap() {
@@ -854,6 +1547,7 @@ const App = (() => {
     initSubjectModal();
     initSettings();
     initLibraryControls();
+    initShared();
 
     Viewer.init();
     await Notes.init();
@@ -874,17 +1568,49 @@ const App = (() => {
     }
   }
 
-  return { navigate, refreshDashboard, renderLibrary, bootstrap, init };
+  return { 
+    navigate, 
+    refreshDashboard, 
+    renderLibrary, 
+    bootstrap, 
+    init,
+    getCurrentView: () => currentView,
+    getCurrentSpaceId: () => currentSpaceId
+  };
 })();
 
 /* ── Subject select refresh ─────────────────────────── */
 function refreshSubjectSelects() {
-  const subjects = LS.get('subjects', []);
+  const isShared = (typeof App !== 'undefined' && App.getCurrentView && App.getCurrentView() === 'shared' && App.getCurrentSpaceId());
+  const spaceId = isShared ? App.getCurrentSpaceId() : null;
+  
+  const subjects = LS.get('subjects', []).filter(s => {
+    if (isShared) {
+      return s.spaceId === spaceId;
+    } else {
+      return !s.spaceId;
+    }
+  });
+
   ['upload-subject-select', 'sched-subject'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
     const cur = sel.value;
-    sel.innerHTML = `<option value="">No subject</option>`;
+    
+    // For scheduling subject, we always want personal subjects
+    if (id === 'sched-subject') {
+      const personalSubjects = LS.get('subjects', []).filter(s => !s.spaceId);
+      sel.innerHTML = `<option value="">No subject</option>`;
+      personalSubjects.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id; opt.textContent = `${s.icon} ${s.name}`;
+        sel.appendChild(opt);
+      });
+      if (cur) sel.value = cur;
+      return;
+    }
+    
+    sel.innerHTML = isShared ? `<option value="">No folder</option>` : `<option value="">No subject</option>`;
     subjects.forEach(s => {
       const opt = document.createElement('option');
       opt.value = s.id; opt.textContent = `${s.icon} ${s.name}`;

@@ -2334,3 +2334,215 @@ img { max-width: 100%; }
   .global-timer-pill { margin-right: 0; }
   .timer-text { font-size: 0.78rem; }
 }
+
+/* ── SHARED STUDY SPACES ────────────────────────────────── */
+.shared-tabs-row {
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.shared-tab {
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-3);
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all var(--t);
+  position: relative;
+}
+
+.shared-tab:hover {
+  color: var(--text);
+}
+
+.shared-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.shared-space-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  cursor: pointer;
+  transition: all var(--t);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.shared-space-card:hover {
+  border-color: var(--border-2);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.shared-space-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shared-space-card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-md);
+  background: var(--primary-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.shared-space-card-name {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.shared-space-card-desc {
+  font-size: 0.78rem;
+  color: var(--text-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.shared-space-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.shared-space-card-stats {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+/* Overlapping Avatars styling */
+.member-avatars-row {
+  display: flex;
+  align-items: center;
+}
+
+.member-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--surface);
+  margin-left: -8px;
+  transition: all var(--t);
+  flex-shrink: 0;
+}
+
+.member-avatar:first-child {
+  margin-left: 0;
+}
+
+.member-avatar:hover {
+  transform: translateY(-2px);
+  z-index: 10;
+}
+
+.member-avatar.more {
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 0.6rem;
+}
+
+/* Friend items style */
+.friend-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  gap: 12px;
+  transition: all var(--t);
+}
+
+.friend-list-item:hover {
+  border-color: var(--border-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.friend-item-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.friend-item-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.friend-item-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-item-email {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.friend-req-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  gap: 10px;
+}

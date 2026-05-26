@@ -144,6 +144,11 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         <span>Schedule</span>
       </a>
+      <div class="nav-section-label" style="margin-top:8px;">Collaboration</div>
+      <a class="nav-link" data-view="shared">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <span>Shared Spaces</span>
+      </a>
       <div class="nav-section-label" style="margin-top:8px;">Account</div>
       <a class="nav-link" data-view="settings">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -606,6 +611,158 @@
         </div>
       </section>
 
+      <!-- ── SHARED STUDY SPACES ─────────────────────────────── -->
+      <section id="view-shared" class="view hidden">
+        <div class="view-header">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <h2 style="font-size:1.25rem;font-weight:800;color:var(--text);margin:0;">Shared Study Spaces</h2>
+            <p style="font-size:0.8rem;color:var(--text-3);margin:0;">Collaborate with friends in shared workspaces</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-ghost" id="shared-join-space-btn">
+              <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
+              Join Space
+            </button>
+            <button class="btn-primary" id="shared-create-space-btn">
+              <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Create Space
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="shared-tabs-row" style="margin-bottom:20px;border-bottom:1px solid var(--border);display:flex;gap:16px;">
+          <button class="shared-tab active" data-tab="spaces" style="font-size:0.9rem;font-weight:600;padding:8px 4px;border-bottom:2px solid var(--primary);color:var(--primary);cursor:pointer;background:none;outline:none;">
+            Workspaces
+          </button>
+          <button class="shared-tab" data-tab="friends" style="font-size:0.9rem;font-weight:500;padding:8px 4px;border-bottom:2px solid transparent;color:var(--text-3);cursor:pointer;background:none;outline:none;">
+            Friends & Collaboration
+          </button>
+        </div>
+
+        <!-- ── TAB CONTENT: SPACES ───────────────────────────── -->
+        <div id="shared-tab-spaces">
+          <!-- Main Workspaces Grid -->
+          <div class="spaces-grid" id="shared-spaces-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:16px;">
+            <!-- Rendered dynamically -->
+          </div>
+          <div class="empty-state hidden" id="shared-spaces-empty" style="padding:48px 20px; text-align:center;">
+            <span class="empty-icon" style="font-size:2.5rem;">👥</span>
+            <h3>No shared spaces yet</h3>
+            <p>Create a space or invite friends to study together</p>
+            <button class="btn-primary" id="create-first-space-btn" style="margin-top:10px;">Create study space</button>
+          </div>
+        </div>
+
+        <!-- ── TAB CONTENT: FRIENDS ──────────────────────────── -->
+        <div id="shared-tab-friends" class="hidden">
+          <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:24px;align-items:start;">
+            
+            <!-- Friend management pane -->
+            <div class="settings-card" style="padding:20px;margin-bottom:0;">
+              <h3 style="font-size:0.95rem;margin-bottom:6px;">Add a Friend</h3>
+              <p style="font-size:0.75rem;color:var(--text-3);margin-bottom:12px;">Enter your friend's unique code to add them</p>
+              <div style="display:flex;gap:6px;margin-bottom:16px;">
+                <input class="form-input" id="friend-search-input" placeholder="e.g. ALICE-4521" style="font-size:0.82rem;padding:8px 12px;" />
+                <button class="btn-primary" id="friend-send-request-btn" style="padding:8px 14px;">Add</button>
+              </div>
+              
+              <!-- Display My Friend Code -->
+              <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 12px;margin-top:16px;display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                  <div style="font-size:0.7rem;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">My Friend Code</div>
+                  <div style="font-size:0.95rem;font-weight:800;color:var(--primary);margin-top:2px;" id="my-friend-code-text">LOADING-0000</div>
+                </div>
+                <button class="btn-ghost" id="copy-friend-code-btn" style="font-size:0.7rem;padding:4px 8px;">📋 Copy</button>
+              </div>
+              
+              <!-- Incoming requests -->
+              <h3 style="font-size:0.95rem;margin-bottom:8px;margin-top:20px;" id="incoming-requests-title">Friend Requests (0)</h3>
+              <div class="friend-requests-list" id="incoming-requests-list" style="display:flex;flex-direction:column;gap:8px;">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+
+            <!-- Friends list pane -->
+            <div class="settings-card" style="padding:20px;margin-bottom:0;">
+              <h3 style="font-size:0.95rem;margin-bottom:12px;" id="friends-list-title">Your Friends (0)</h3>
+              <div class="friends-list" id="friends-list-container" style="display:flex;flex-direction:column;gap:8px;">
+                <!-- Rendered dynamically -->
+              </div>
+              <div class="empty-state" id="friends-empty" style="padding:24px 12px;background:none;border:none;box-shadow:none;">
+                <span class="empty-icon" style="font-size:1.8rem;margin-bottom:4px;">👋</span>
+                <h4 style="font-size:0.85rem;margin-bottom:2px;">No friends added yet</h4>
+                <p style="font-size:0.75rem;color:var(--text-3);">Send your first friend request to start collaborating</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── SPACE DETAIL VIEW (DOCKER PANEL) ───────────────── -->
+        <div id="shared-space-detail" class="hidden" style="animation:fadeIn 0.2s ease;">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:20px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <button class="btn-icon" id="shared-space-back-btn" title="Back to workspaces" style="width:30px;height:30px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <div>
+                  <h3 id="shared-space-title" style="font-size:1.1rem;font-weight:800;color:var(--text);margin:0;display:flex;align-items:center;gap:8px;">
+                    <span id="shared-space-icon">📚</span>
+                    <span id="shared-space-name-text">DBMS Group</span>
+                  </h3>
+                  <div style="font-size:0.78rem;color:var(--text-3);margin-top:2px;" id="shared-space-desc">Collaborative space for final exam prep</div>
+                </div>
+              </div>
+              
+              <!-- Member avatars list -->
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div class="member-avatars-row" id="shared-space-members" style="display:flex;align-items:center;">
+                  <!-- Avatars generated dynamically -->
+                </div>
+                <button class="btn-ghost" id="shared-space-invite-btn" style="font-size:0.75rem;padding:5px 10px;">
+                  ➕ Invite Friend
+                </button>
+                <button class="btn-danger" id="shared-space-leave-btn" style="font-size:0.75rem;padding:5px 10px;">
+                  Leave Space
+                </button>
+              </div>
+            </div>
+
+            <!-- Folders / Subjects Section in Shared Space -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;margin-top:24px;border-top:1px solid var(--border);padding-top:16px;">
+              <div class="section-title" style="margin:0;">Shared Folders</div>
+              <button class="btn-ghost" id="shared-create-folder-btn" style="font-size:0.75rem;padding:4px 10px;">
+                ➕ Create Folder
+              </button>
+            </div>
+            <div class="subjects-grid" id="shared-folders-grid" style="margin-bottom:24px;display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:12px;">
+              <!-- Shared subject cards rendered here -->
+            </div>
+
+            <!-- Upload + File grid row inside space -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border-top:1px solid var(--border);padding-top:16px;">
+              <div class="section-title" style="margin:0;" id="shared-files-section-title">All Shared Files</div>
+              <button class="btn-primary" id="shared-upload-file-btn" style="font-size:0.78rem;padding:6px 12px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Upload File
+              </button>
+            </div>
+
+            <!-- Shared Files List/Grid -->
+            <div id="shared-space-files-grid" class="lib-grid">
+              <!-- Rendered dynamically -->
+            </div>
+            <div class="empty-state" id="shared-space-files-empty" style="padding:32px 12px;background:none;border:none;box-shadow:none;">
+              <span class="empty-icon" style="font-size:2rem;margin-bottom:6px;">📂</span>
+              <h4 style="font-size:0.85rem;margin-bottom:2px;">No shared files yet</h4>
+              <p style="font-size:0.75rem;color:var(--text-3);max-width:300px;margin:0 auto;">Be the first to upload a study resource or PDF into this workspace!</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </div><!-- /.view-container -->
   </div><!-- /.main-wrapper -->
 
@@ -630,6 +787,10 @@
     <div class="bn-item" data-view="schedule">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Schedule
+    </div>
+    <div class="bn-item" data-view="shared">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+      Shared
     </div>
   </nav>
 
@@ -849,6 +1010,82 @@
     <div class="modal-footer">
       <button class="btn-ghost" id="sched-cancel-btn">Cancel</button>
       <button class="btn-primary" id="sched-save-btn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── CREATE SHARED SPACE MODAL ───────────────────────── -->
+<div class="modal-overlay hidden" id="create-space-modal" style="align-items:center;justify-content:center;z-index:200;">
+  <div class="modal-card" style="max-width:400px;">
+    <div class="modal-header">
+      <h3>Create shared workspace</h3>
+      <button class="modal-close" id="create-space-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="setting-label">Space name</label>
+        <input class="form-input" id="space-name-input" placeholder="e.g. DBMS Study Group" />
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="setting-label">Description</label>
+        <input class="form-input" id="space-desc-input" placeholder="e.g. Preparing for DBMS final exam" />
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="setting-label">Space Icon (Emoji)</label>
+        <div class="icon-picker" id="space-icon-picker" style="display:flex;flex-wrap:wrap;gap:6px;">
+          <div class="icon-swatch active" data-icon="👥">👥</div>
+          <div class="icon-swatch" data-icon="🚀">🚀</div>
+          <div class="icon-swatch" data-icon="💡">💡</div>
+          <div class="icon-swatch" data-icon="🎓">🎓</div>
+          <div class="icon-swatch" data-icon="🧠">🧠</div>
+          <div class="icon-swatch" data-icon="⚡">⚡</div>
+          <div class="icon-swatch" data-icon="🔬">🔬</div>
+          <div class="icon-swatch" data-icon="🔥">🔥</div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="setting-label">Select Friends to Invite</label>
+        <div id="space-invite-friends-list" style="display:flex;flex-direction:column;gap:6px;max-height:120px;overflow-y:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:8px;">
+          <!-- Friends with checkboxes will be rendered dynamically -->
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="create-space-cancel">Cancel</button>
+      <button class="btn-primary" id="create-space-confirm">Create space</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── JOIN SPACE MODAL ────────────────────────────────── -->
+<div class="modal-overlay hidden" id="join-space-modal" style="align-items:center;justify-content:center;z-index:200;">
+  <div class="modal-card" style="max-width:380px;">
+    <div class="modal-header">
+      <h3>Join shared workspace</h3>
+      <button class="modal-close" id="join-space-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:16px;">
+        <label class="setting-label">Enter Space Invite Code</label>
+        <input class="form-input" id="space-code-input" placeholder="e.g. DBMS-101" />
+        <div style="font-size:0.75rem;color:var(--text-3);margin-top:4px;">Ask your friend for their space ID.</div>
+      </div>
+      
+      <!-- Pending invites list -->
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="setting-label">Pending Invitations</label>
+        <div id="pending-invitations-list" style="display:flex;flex-direction:column;gap:8px;">
+          <!-- Simulated pending invites -->
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="join-space-cancel">Cancel</button>
+      <button class="btn-primary" id="join-space-confirm">Join space</button>
     </div>
   </div>
 </div>
