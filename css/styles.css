@@ -1146,6 +1146,7 @@ body.modal-open {
   box-shadow: var(--shadow-lg);
   border-radius: 3px;
   overflow: hidden;
+  position: relative;
 }
 
 .pdf-page-wrap canvas { display: block; }
@@ -1162,6 +1163,9 @@ body.modal-open {
   font-size: 0.9rem;
   line-height: 1.8;
   color: var(--text);
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
 }
 
 .text-viewer h1,h2,h3,h4 { color: var(--text); margin: 16px 0 8px; }
@@ -2801,6 +2805,7 @@ body.modal-open {
   border-radius: 4px;
   overflow: hidden;
   line-height: 0;
+  position: relative;
 }
 
 /* ── Split divider ──────────────────────────────────────── */

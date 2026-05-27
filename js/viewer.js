@@ -200,11 +200,32 @@ const Viewer = (() => {
               canvas.style.height = `${vp.height}px`;
               
               pw.innerHTML = '';
+              pw.style.position = 'relative';
               pw.appendChild(canvas);
               
               const ctx = canvas.getContext('2d');
               ctx.scale(dpr, dpr);
               await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+              // Render text layer for selection using official PDF.js API
+              try {
+                const textContent = await page.getTextContent();
+                const textLayerDiv = document.createElement('div');
+                textLayerDiv.className = 'textLayer';
+                textLayerDiv.style.width = `${vp.width}px`;
+                textLayerDiv.style.height = `${vp.height}px`;
+                pw.appendChild(textLayerDiv);
+
+                pdfjsLib.renderTextLayer({
+                  textContent: textContent,
+                  container: textLayerDiv,
+                  viewport: vp,
+                  textDivs: []
+                });
+              } catch (e) {
+                console.warn('Text layer render failed for page', pageNum, e);
+              }
+
               pw.dataset.rendered = "true";
             } catch (err) {
               console.error("Lazy render error for page", pageNum, err);
@@ -767,12 +788,34 @@ const Viewer = (() => {
     canvas.style.height = `${vp.height}px`;
 
     container.innerHTML = '';
+    container.style.position = 'relative';
+    container.style.width = `${vp.width}px`;
+    container.style.height = `${vp.height}px`;
     container.appendChild(canvas);
     
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+    // Render text layer for selection using official PDF.js API
+    try {
+      const textContent = await page.getTextContent();
+      const textLayerDiv = document.createElement('div');
+      textLayerDiv.className = 'textLayer';
+      textLayerDiv.style.width = `${vp.width}px`;
+      textLayerDiv.style.height = `${vp.height}px`;
+      container.appendChild(textLayerDiv);
+
+      pdfjsLib.renderTextLayer({
+        textContent: textContent,
+        container: textLayerDiv,
+        viewport: vp,
+        textDivs: []
+      });
+    } catch (e) {
+      console.warn('Text layer render failed for page', pageNum, e);
+    }
   }
 
   async function buildThumbnails() {
