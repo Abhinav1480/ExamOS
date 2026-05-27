@@ -977,6 +977,10 @@ img { max-width: 100%; }
 .lib-list { display: flex; flex-direction: column; gap: 6px; }
 
 /* ── DOCUMENT VIEWER MODAL ──────────────────────────────── */
+body.modal-open {
+  overflow: hidden !important;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;

@@ -23,9 +23,24 @@ const Workspace = (() => {
   const el = id => document.getElementById(id);
 
   /* ── Persistence ────────────────────────────────────── */
+  let saveStateTimeout = null;
+  function debouncedSaveState() {
+    clearTimeout(saveStateTimeout);
+    saveStateTimeout = setTimeout(saveState, 500);
+  }
+
   function saveState() {
     const state = tabs.map(t => ({ id: t.id, fileId: t.fileId, pinned: t.pinned, scrollPos: t.scrollPos || 0 }));
     LS.set(LS_KEY, { tabs: state, activeTabId, splitMode, splitActiveTabId, splitRatio });
+  }
+
+  function getScrollableElement(paneEl) {
+    if (!paneEl) return null;
+    const textViewer = paneEl.querySelector('.text-viewer');
+    if (textViewer) return textViewer;
+    const imgViewer = paneEl.querySelector('.image-viewer');
+    if (imgViewer) return imgViewer;
+    return paneEl;
   }
 
   function loadState() {
@@ -423,15 +438,23 @@ const Workspace = (() => {
     const cleanup = await Viewer.renderInto(tab.fileId, paneEl);
     if (cleanup) cleanupFns[tabId] = cleanup;
 
+    // Get the correct scrollable element (.text-viewer, .image-viewer, or paneEl itself)
+    const scrollEl = getScrollableElement(paneEl);
+
     // Restore scroll position
-    if (tab.scrollPos > 0) {
-      requestAnimationFrame(() => { paneEl.scrollTop = tab.scrollPos; });
+    if (tab.scrollPos > 0 && scrollEl) {
+      setTimeout(() => {
+        scrollEl.scrollTop = tab.scrollPos;
+      }, 100);
     }
 
     // Track scroll position for persistence
-    paneEl.addEventListener('scroll', () => {
-      tab.scrollPos = paneEl.scrollTop;
-    }, { passive: true });
+    if (scrollEl) {
+      scrollEl.addEventListener('scroll', () => {
+        tab.scrollPos = scrollEl.scrollTop;
+        debouncedSaveState();
+      }, { passive: true });
+    }
   }
 
   /* ── Split divider drag ─────────────────────────────── */

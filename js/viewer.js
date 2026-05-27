@@ -36,6 +36,7 @@ const Viewer = (() => {
     // Show modal
     const modal = el('viewer-modal');
     modal.classList.remove('hidden');
+    document.body.classList.add('modal-open');
     el('viewer-filename').textContent = meta.name;
     el('viewer-main').innerHTML = `<div class="spinner" style="margin-top:80px;"></div>`;
 
@@ -58,6 +59,15 @@ const Viewer = (() => {
         else if (meta.type === 'docx' || meta.type === 'doc') await openDOCX(fileObj.data, meta);
         else if (meta.type === 'pptx' || meta.type === 'ppt') await openPPTX(fileObj.data, meta);
         else openUnsupported(meta);
+      }
+
+      // Restore scroll position
+      const savedScroll = LS.get('scroll_' + fileId, 0);
+      if (savedScroll > 0) {
+        setTimeout(() => {
+          const mainEl = el('viewer-main');
+          if (mainEl) mainEl.scrollTop = savedScroll;
+        }, 100);
       }
     } catch (err) {
       el('viewer-main').innerHTML = `
@@ -989,6 +999,7 @@ const Viewer = (() => {
   function close() {
     const modal = el('viewer-modal');
     modal.classList.add('hidden');
+    document.body.classList.remove('modal-open');
     pdfDoc = null;
     currentFileId = null;
     if (pdfScrollObserver) {
@@ -1027,12 +1038,24 @@ const Viewer = (() => {
   }
 
   /* ── Bind events ─────────────────────────────────────── */
+  let saveScrollTimeout = null;
   function bindEvents() {
     // Close
     el('viewer-close').addEventListener('click', close);
     el('viewer-modal').addEventListener('click', e => {
       if (e.target === el('viewer-modal')) close();
     });
+
+    // Save scroll position for modal viewer
+    el('viewer-main').addEventListener('scroll', () => {
+      if (currentFileId) {
+        const scrollTop = el('viewer-main').scrollTop;
+        clearTimeout(saveScrollTimeout);
+        saveScrollTimeout = setTimeout(() => {
+          LS.set('scroll_' + currentFileId, scrollTop);
+        }, 500);
+      }
+    }, { passive: true });
 
     // Fullscreen
     el('viewer-fullscreen').addEventListener('click', toggleFullscreen);
