@@ -161,6 +161,11 @@ const Viewer = (() => {
     // Render all pages
     async function renderAllPagesWS() {
       if (state.destroyed) return;
+      
+      const prevScrollTop = container.scrollTop;
+      const prevScrollHeight = container.scrollHeight;
+      const scrollPercent = prevScrollHeight > 0 ? (prevScrollTop / prevScrollHeight) : 0;
+
       wrap.innerHTML = '';
       if (state.observer) state.observer.disconnect();
 
@@ -174,7 +179,7 @@ const Viewer = (() => {
             if (inp) inp.value = pn;
           }
         }
-      }, { root: wrap, threshold: 0.35 });
+      }, { root: container, threshold: 0.35 });
 
       for (let i = 1; i <= total; i++) {
         const pw = document.createElement('div');
@@ -195,6 +200,10 @@ const Viewer = (() => {
           await page.render({ canvasContext: ctx, viewport: vp }).promise;
         }
         state.observer.observe(pw);
+      }
+
+      if (prevScrollHeight > 0) {
+        container.scrollTop = scrollPercent * container.scrollHeight;
       }
     }
 
@@ -367,10 +376,15 @@ const Viewer = (() => {
   }
 
   async function renderAllPages() {
+    const mainEl = el('viewer-main');
+    const prevScrollTop = mainEl.scrollTop;
+    const prevScrollHeight = mainEl.scrollHeight;
+    const scrollPercent = prevScrollHeight > 0 ? (prevScrollTop / prevScrollHeight) : 0;
+
     const wrap = document.createElement('div');
     wrap.className = 'pdf-pages-wrap';
-    el('viewer-main').innerHTML = '';
-    el('viewer-main').appendChild(wrap);
+    mainEl.innerHTML = '';
+    mainEl.appendChild(wrap);
 
     if (pdfScrollObserver) {
       pdfScrollObserver.disconnect();
@@ -390,7 +404,7 @@ const Viewer = (() => {
         }
       }
     }, {
-      root: el('viewer-main'),
+      root: mainEl,
       threshold: 0.35 // Trigger when 35% of the page container is inside viewport bounds
     });
 
@@ -402,6 +416,10 @@ const Viewer = (() => {
       wrap.appendChild(pageWrap);
       await renderPageToEl(i, pageWrap);
       pdfScrollObserver.observe(pageWrap);
+    }
+
+    if (prevScrollHeight > 0) {
+      mainEl.scrollTop = scrollPercent * mainEl.scrollHeight;
     }
   }
 
