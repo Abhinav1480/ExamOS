@@ -2546,3 +2546,680 @@ img { max-width: 100%; }
   padding: 10px 12px;
   gap: 10px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   WORKSPACE — Multi-File Tab System + Split Screen
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Workspace view ─────────────────────────────────────── */
+#view-workspace {
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-h));
+  max-width: none;
+  overflow: hidden;
+}
+
+/* ── Tab Bar ────────────────────────────────────────────── */
+.ws-tab-bar {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  min-height: 40px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.ws-tab-strip {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 0;
+  min-height: 40px;
+}
+
+.ws-tab-strip::-webkit-scrollbar { display: none; }
+
+.ws-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  border-left: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ws-tab-actions .btn-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.ws-tab-actions .btn-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ws-tab-actions .btn-icon.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary-border);
+}
+
+/* ── Individual tab ─────────────────────────────────────── */
+.ws-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  min-width: 120px;
+  max-width: 200px;
+  height: 40px;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 0.78rem;
+  font-weight: 500;
+  transition: background var(--t), color var(--t);
+  position: relative;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.ws-tab:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.ws-tab.active {
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ws-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--primary);
+  border-radius: 2px 2px 0 0;
+  animation: tabSlide 0.2s ease;
+}
+
+@keyframes tabSlide {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.ws-tab.split-active {
+  background: var(--surface-2);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ws-tab.split-active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+
+.ws-tab.pinned {
+  min-width: 50px;
+  max-width: 160px;
+}
+
+.ws-tab.pinned .ws-tab-close { display: none; }
+
+.ws-tab.dragging { opacity: 0.5; }
+.ws-tab.drag-over { border-left: 2px solid var(--primary); }
+
+.ws-tab-icon { font-size: 0.9rem; flex-shrink: 0; }
+
+.ws-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-tab-pin-badge {
+  font-size: 0.6rem;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.ws-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-4);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: all var(--t);
+}
+
+.ws-tab:hover .ws-tab-close { opacity: 1; }
+.ws-tab-close:hover { background: rgba(239,68,68,0.15); color: var(--danger); }
+.ws-tab-close svg { width: 12px; height: 12px; }
+
+/* ── Content area ───────────────────────────────────────── */
+.ws-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+}
+
+.ws-content.ws-split-mode {
+  flex-direction: row;
+}
+
+/* ── Panes ──────────────────────────────────────────────── */
+.ws-pane {
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+  background: var(--bg);
+  scroll-behavior: smooth;
+}
+
+.ws-pane-full { flex: 1; }
+
+.ws-pane .text-viewer {
+  padding: 32px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.ws-pane .image-viewer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 20px;
+  overflow: auto;
+}
+
+.ws-pane .image-viewer img {
+  max-width: 100%;
+  height: auto;
+  transition: transform 0.15s ease;
+  transform-origin: center center;
+}
+
+.ws-pane .yt-viewer {
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.ws-pane .yt-viewer iframe {
+  width: 100%;
+  max-width: 900px;
+  aspect-ratio: 16/9;
+  border-radius: var(--r-lg);
+}
+
+.ws-pane .unsupported-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: var(--text-3);
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.ws-pane .pdf-page-wrap {
+  margin: 12px auto;
+  box-shadow: var(--shadow-md);
+  border-radius: 4px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+/* ── Split divider ──────────────────────────────────────── */
+.ws-split-divider {
+  width: 6px;
+  cursor: col-resize;
+  background: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  transition: background var(--t);
+  z-index: 5;
+}
+
+.ws-split-divider:hover,
+.ws-split-divider:active {
+  background: var(--primary);
+}
+
+.ws-split-grip {
+  width: 2px;
+  height: 32px;
+  background: var(--text-4);
+  border-radius: 2px;
+  opacity: 0.5;
+  transition: opacity var(--t);
+}
+
+.ws-split-divider:hover .ws-split-grip {
+  opacity: 1;
+  background: white;
+}
+
+/* ── PDF toolbar inside pane ────────────────────────────── */
+.ws-pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-wrap: wrap;
+}
+
+.ws-pdf-toolbar .btn-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.ws-pdf-toolbar .btn-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ws-pdf-page-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+
+.ws-pdf-page-input {
+  width: 42px;
+  text-align: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 3px 4px;
+  font-size: 0.78rem;
+  color: var(--text);
+  outline: none;
+}
+
+.ws-pdf-page-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+.ws-pdf-zoom-label {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  font-weight: 600;
+  min-width: 36px;
+  text-align: center;
+}
+
+.ws-pdf-pages-wrap {
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ── Image toolbar inside pane ──────────────────────────── */
+.ws-img-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.ws-img-toolbar .btn-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.ws-img-toolbar .btn-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ws-img-zoom-label {
+  font-size: 0.72rem;
+  color: var(--text-3);
+  font-weight: 600;
+  min-width: 36px;
+  text-align: center;
+}
+
+/* ── Empty state ────────────────────────────────────────── */
+.ws-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 60px 24px;
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.ws-empty-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  opacity: 0.8;
+}
+
+.ws-empty-state h3 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.ws-empty-state p {
+  font-size: 0.9rem;
+  color: var(--text-3);
+  max-width: 380px;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.ws-empty-shortcuts {
+  display: flex;
+  gap: 24px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.ws-empty-shortcut {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-4);
+}
+
+.ws-empty-shortcut kbd {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: var(--font);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+/* ── Context menu ───────────────────────────────────────── */
+.ws-context-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  min-width: 180px;
+  animation: fadeIn 0.1s ease;
+}
+
+.ws-ctx-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  color: var(--text-2);
+  text-align: left;
+  border-radius: var(--r-sm);
+  transition: all var(--t);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.ws-ctx-item:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* ── File picker overlay ────────────────────────────────── */
+.ws-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: fadeIn 0.15s ease;
+  backdrop-filter: blur(4px);
+}
+
+.ws-picker-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  width: 100%;
+  max-width: 480px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  animation: authIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ws-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ws-picker-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ws-picker-search-wrap {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ws-picker-search {
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.ws-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.ws-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: all var(--t);
+}
+
+.ws-picker-item:hover {
+  background: var(--primary-soft);
+}
+
+.ws-picker-item.already-open {
+  opacity: 0.6;
+}
+
+.ws-picker-item-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.ws-picker-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-picker-item-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-picker-item-meta {
+  font-size: 0.7rem;
+  color: var(--text-3);
+}
+
+.ws-picker-item-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 2px 8px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+
+.ws-picker-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-3);
+  font-size: 0.85rem;
+}
+
+/* ── "Open in Workspace" button ─────────────────────────── */
+.open-ws-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-4);
+  transition: all var(--t);
+  border: none;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.open-ws-btn:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.open-ws-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Render error ───────────────────────────────────────── */
+.ws-render-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+/* ── Mobile responsive ──────────────────────────────────── */
+@media (max-width: 768px) {
+  #view-workspace {
+    height: calc(100vh - var(--topbar-h) - var(--bottom-nav-h));
+  }
+
+  .ws-tab-bar {
+    min-height: 38px;
+  }
+
+  .ws-tab {
+    min-width: 100px;
+    max-width: 160px;
+    height: 38px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+  }
+
+  .ws-tab-actions {
+    padding: 0 4px;
+  }
+
+  .ws-tab-actions .btn-icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .ws-tab-close {
+    display: flex;
+    opacity: 0.6;
+  }
+
+  .ws-pane .text-viewer {
+    padding: 16px;
+  }
+
+  .ws-pdf-toolbar {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+
+  .ws-picker-card {
+    max-width: 95vw;
+    max-height: 80vh;
+    margin: 16px;
+  }
+
+  .ws-empty-shortcuts {
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+  }
+}

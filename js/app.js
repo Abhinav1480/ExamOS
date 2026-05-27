@@ -4,8 +4,8 @@
    ═══════════════════════════════════════════════════════ */
 
 const App = (() => {
-  const VIEWS = ['dashboard', 'library', 'notes', 'focus', 'schedule', 'settings', 'shared'];
-  const TITLES = { dashboard:'Dashboard', library:'Library', notes:'Notes', focus:'Focus', schedule:'Schedule', settings:'Settings', shared:'Shared Spaces' };
+  const VIEWS = ['dashboard', 'library', 'workspace', 'notes', 'focus', 'schedule', 'settings', 'shared'];
+  const TITLES = { dashboard:'Dashboard', library:'Library', workspace:'Workspace', notes:'Notes', focus:'Focus', schedule:'Schedule', settings:'Settings', shared:'Shared Spaces' };
   let currentView = 'dashboard';
   let libFilter = 'all';
   let libGrid = true;
@@ -32,6 +32,7 @@ const App = (() => {
     if (view === 'schedule') Timetable.init();
     if (view === 'focus') Pomodoro.renderBars();
     if (view === 'shared') renderSharedView();
+    if (view === 'workspace') Workspace.activate();
   }
 
   /* ── Sidebar mobile ──────────────────────────────────── */
@@ -228,6 +229,9 @@ const App = (() => {
         ${f.pinned ? '<span class="pinned-badge">📌 Pinned</span>' : ''}
         ${f.label ? `<span class="file-label-tag label-${f.label}">${getLabelIcon(f.label)} ${capitalizeFirst(f.label)}</span>` : ''}
         <div class="file-row-actions">
+          <button class="open-ws-btn" data-id="${f.id}" title="Open in Workspace">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="2" y1="12" x2="12" y2="12"/></svg>
+          </button>
           <button class="btn-icon pin-btn" data-id="${f.id}" title="${f.pinned ? 'Unpin' : 'Pin'}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
           </button>
@@ -250,6 +254,9 @@ const App = (() => {
     });
     container.querySelectorAll('.del-file-btn').forEach(btn => {
       btn.addEventListener('click', e => { e.stopPropagation(); deleteFile(btn.dataset.id); });
+    });
+    container.querySelectorAll('.open-ws-btn').forEach(btn => {
+      btn.addEventListener('click', e => { e.stopPropagation(); Workspace.openFile(btn.dataset.id); });
     });
   }
 
@@ -319,6 +326,9 @@ const App = (() => {
           });
           libRecentGrid.querySelectorAll('.lib-del-btn, .del-file-btn').forEach(btn => {
             btn.addEventListener('click', e => { e.stopPropagation(); deleteFile(btn.dataset.id); });
+          });
+          libRecentGrid.querySelectorAll('.open-ws-btn').forEach(btn => {
+            btn.addEventListener('click', e => { e.stopPropagation(); Workspace.openFile(btn.dataset.id); });
           });
         } else {
           if (libRecentSection) libRecentSection.style.display = 'none';
@@ -552,6 +562,9 @@ const App = (() => {
     grid.querySelectorAll('.del-file-btn, .lib-del-btn').forEach(btn => {
       btn.addEventListener('click', e => { e.stopPropagation(); deleteFile(btn.dataset.id); });
     });
+    grid.querySelectorAll('.open-ws-btn').forEach(btn => {
+      btn.addEventListener('click', e => { e.stopPropagation(); Workspace.openFile(btn.dataset.id); });
+    });
   }
 
   function buildLibCard(f) {
@@ -561,6 +574,9 @@ const App = (() => {
     return `
       <div class="lib-card" data-id="${f.id}">
         <div class="lib-card-actions">
+          <button class="open-ws-btn" data-id="${f.id}" title="Open in Workspace">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="2" y1="12" x2="12" y2="12"/></svg>
+          </button>
           <button class="btn-icon lib-pin-btn" data-id="${f.id}" title="${f.pinned ? 'Unpin' : 'Pin'}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
           </button>
@@ -1550,10 +1566,20 @@ const App = (() => {
     initShared();
 
     Viewer.init();
+    Workspace.init();
     await Notes.init();
     Pomodoro.init();
 
     refreshDashboard();
+
+    // Wire up workspace empty-state picker button
+    const wsPicker = document.getElementById('ws-open-picker-btn');
+    if (wsPicker) wsPicker.addEventListener('click', () => {
+      Workspace.openFile._picker ? Workspace.openFile._picker() : null;
+      // Fallback: navigate to library
+      const addBtn = document.getElementById('ws-add-tab-btn');
+      if (addBtn) addBtn.click();
+    });
   }
 
   /* ── Bootstrap ───────────────────────────────────────── */

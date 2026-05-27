@@ -172,7 +172,8 @@ const DataPortability = {
         theme: LS.get('theme', 'dark'),
         shared_spaces: LS.get('shared_spaces', []),
         friends: LS.get('friends', []),
-        friend_requests: LS.get('friend_requests', [])
+        friend_requests: LS.get('friend_requests', []),
+        workspace_tabs: LS.get('workspace_tabs', null)
       },
       filesMeta: FileMeta.getAll(),
       notes: notes.map(n => ({ ...n, id: n.localId }))
@@ -197,6 +198,7 @@ const DataPortability = {
     if (s.shared_spaces) LS.set('shared_spaces', s.shared_spaces);
     if (s.friends) LS.set('friends', s.friends);
     if (s.friend_requests) LS.set('friend_requests', s.friend_requests);
+    if (s.workspace_tabs) LS.set('workspace_tabs', s.workspace_tabs);
     if (data.filesMeta) LS.set('files_meta', data.filesMeta);
     if (data.notes) {
       for (const note of data.notes) {

@@ -132,6 +132,10 @@
         <span>Library</span>
         <span class="nav-badge" id="lib-badge">0</span>
       </a>
+      <a class="nav-link" data-view="workspace">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="2" y1="12" x2="12" y2="12"/></svg>
+        <span>Workspace</span>
+      </a>
       <a class="nav-link" data-view="notes">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         <span>Notes</span>
@@ -611,6 +615,44 @@
         </div>
       </section>
 
+      <!-- ── WORKSPACE ─────────────────────────────────────────── -->
+      <section id="view-workspace" class="view hidden">
+        <!-- Tab bar -->
+        <div class="ws-tab-bar hidden" id="ws-tab-bar">
+          <div class="ws-tab-strip" id="ws-tab-strip"></div>
+          <div class="ws-tab-actions">
+            <button class="btn-icon" id="ws-add-tab-btn" title="Open file (Ctrl+O)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <button class="btn-icon ws-split-btn" id="ws-split-toggle-btn" title="Toggle split view (Ctrl+\\)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+            </button>
+            <button class="btn-icon" id="ws-close-all-btn" title="Close all tabs">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Content area -->
+        <div class="ws-content hidden" id="ws-content"></div>
+
+        <!-- Empty state -->
+        <div class="ws-empty-state" id="ws-empty-state">
+          <div class="ws-empty-icon">📑</div>
+          <h3>Multi-File Workspace</h3>
+          <p>Open files from your Library to study multiple documents side-by-side. Use split view to compare files.</p>
+          <button class="btn-primary" id="ws-open-picker-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Open files
+          </button>
+          <div class="ws-empty-shortcuts">
+            <div class="ws-empty-shortcut"><kbd>Ctrl</kbd>+<kbd>Tab</kbd> Switch tabs</div>
+            <div class="ws-empty-shortcut"><kbd>Ctrl</kbd>+<kbd>W</kbd> Close tab</div>
+            <div class="ws-empty-shortcut"><kbd>Ctrl</kbd>+<kbd>\\</kbd> Split view</div>
+          </div>
+        </div>
+      </section>
+
       <!-- ── SHARED STUDY SPACES ─────────────────────────────── -->
       <section id="view-shared" class="view hidden">
         <div class="view-header">
@@ -783,6 +825,10 @@
     <div class="bn-item" data-view="focus">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       Focus
+    </div>
+    <div class="bn-item" data-view="workspace">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="2" y1="12" x2="12" y2="12"/></svg>
+      Workspace
     </div>
     <div class="bn-item" data-view="schedule">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -1094,12 +1140,13 @@
 <div id="toasts"></div>
 
 <!-- ─── SCRIPTS ──────────────────────────────────────────── -->
-<script src="js/auth.js?v=2"></script>
-<script src="js/storage.js?v=2"></script>
-<script src="js/viewer.js?v=2"></script>
-<script src="js/notes.js?v=2"></script>
-<script src="js/pomodoro.js?v=2"></script>
-<script src="js/timetable.js?v=2"></script>
-<script src="js/app.js?v=2"></script>
+<script src="js/auth.js?v=3"></script>
+<script src="js/storage.js?v=3"></script>
+<script src="js/viewer.js?v=3"></script>
+<script src="js/workspace.js?v=3"></script>
+<script src="js/notes.js?v=3"></script>
+<script src="js/pomodoro.js?v=3"></script>
+<script src="js/timetable.js?v=3"></script>
+<script src="js/app.js?v=3"></script>
 </body>
 </html>
