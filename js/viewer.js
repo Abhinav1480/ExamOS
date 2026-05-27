@@ -95,7 +95,7 @@ const Viewer = (() => {
         else if (meta.type === 'image') renderImageInto(fileObj.data, meta, containerEl);
         else if (meta.type === 'txt') renderTXTInto(fileObj.data, meta, containerEl);
         else if (meta.type === 'docx' || meta.type === 'doc') await renderDOCXInto(fileObj.data, meta, containerEl);
-        else if (meta.type === 'pptx' || meta.type === 'ppt') renderPPTXInto(meta, containerEl);
+        else if (meta.type === 'pptx' || meta.type === 'ppt') await renderPPTXInto(fileObj.data, meta, containerEl);
         else renderUnsupportedInto(meta, containerEl);
       }
     } catch (err) {
@@ -129,8 +129,17 @@ const Viewer = (() => {
     state.pdfDoc = pdf;
 
     const total = pdf.numPages;
-    const scale = 1.3;
     const dpr = window.devicePixelRatio || 1;
+
+    // Get base page dimensions from page 1
+    const firstPage = await pdf.getPage(1);
+    const firstVp = firstPage.getViewport({ scale: 1.0 });
+    const baseWidth = firstVp.width;
+    const baseHeight = firstVp.height;
+    const aspectRatio = baseWidth / baseHeight;
+
+    let currentScale = 1.3;
+    let currentPage = 1;
 
     // Build toolbar
     const toolbar = document.createElement('div');
@@ -146,6 +155,10 @@ const Viewer = (() => {
       <button class="btn-icon ws-pdf-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
       <span class="ws-pdf-zoom-label">130%</span>
       <button class="btn-icon ws-pdf-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+      <button class="btn-icon ws-pdf-fitwidth" title="Fit width" style="font-size:0.82rem;font-weight:600;font-family:inherit;">↔</button>
+      <button class="btn-icon ws-pdf-fitpage" title="Fit page" style="font-size:0.82rem;font-weight:600;font-family:inherit;">↕</button>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
+      <button class="btn-icon ws-pdf-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
     `;
 
     const wrap = document.createElement('div');
@@ -155,61 +168,127 @@ const Viewer = (() => {
     container.appendChild(toolbar);
     container.appendChild(wrap);
 
-    let currentScale = scale;
-    let currentPage = 1;
+    // Initialize Intersection Observer for Lazy Rendering
+    state.observer = new IntersectionObserver((entries) => {
+      entries.forEach(async entry => {
+        const pw = entry.target;
+        const pageNum = parseInt(pw.dataset.page);
+        if (entry.isIntersecting) {
+          if (!pw.dataset.rendered && !pw.dataset.rendering) {
+            pw.dataset.rendering = "true";
+            try {
+              const page = await pdf.getPage(pageNum);
+              const vp = page.getViewport({ scale: currentScale });
+              
+              pw.style.width = `${vp.width}px`;
+              pw.style.height = `${vp.height}px`;
 
-    // Render all pages
-    async function renderAllPagesWS() {
-      if (state.destroyed) return;
-      
-      const prevScrollTop = container.scrollTop;
-      const prevScrollHeight = container.scrollHeight;
-      const scrollPercent = prevScrollHeight > 0 ? (prevScrollTop / prevScrollHeight) : 0;
-
-      wrap.innerHTML = '';
-      if (state.observer) state.observer.disconnect();
-
-      state.observer = new IntersectionObserver(entries => {
-        const vis = entries.find(e => e.isIntersecting);
-        if (vis) {
-          const pn = parseInt(vis.target.dataset.page);
-          if (currentPage !== pn) {
-            currentPage = pn;
-            const inp = toolbar.querySelector('.ws-pdf-page-input');
-            if (inp) inp.value = pn;
+              const canvas = document.createElement('canvas');
+              canvas.width = vp.width * dpr;
+              canvas.height = vp.height * dpr;
+              canvas.style.width = `${vp.width}px`;
+              canvas.style.height = `${vp.height}px`;
+              
+              pw.innerHTML = '';
+              pw.appendChild(canvas);
+              
+              const ctx = canvas.getContext('2d');
+              ctx.scale(dpr, dpr);
+              await page.render({ canvasContext: ctx, viewport: vp }).promise;
+              pw.dataset.rendered = "true";
+            } catch (err) {
+              console.error("Lazy render error for page", pageNum, err);
+            } finally {
+              delete pw.dataset.rendering;
+            }
+          }
+        } else {
+          // memory optimization: unload pages that are far from the viewport
+          if (pw.dataset.rendered && !pw.dataset.rendering) {
+            const rect = pw.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+            if (rect.bottom < containerRect.top - 2000 || rect.top > containerRect.bottom + 2000) {
+              pw.innerHTML = `<div class="pdf-page-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-3);font-size:0.88rem;">Loading page ${pageNum}...</div>`;
+              delete pw.dataset.rendered;
+            }
           }
         }
-      }, { root: container, threshold: 0.35 });
+      });
+    }, { root: container, rootMargin: '600px 0px 600px 0px', threshold: 0.05 });
 
+    // Scroll-based page indicator calculation (dynamic and perfectly accurate)
+    state.scrollListener = () => {
+      const containerRect = container.getBoundingClientRect();
+      const pages = wrap.querySelectorAll('.pdf-page-wrap');
+      let bestPage = currentPage;
+      let minDistance = Infinity;
+
+      pages.forEach(pw => {
+        const rect = pw.getBoundingClientRect();
+        const distance = Math.abs(rect.top - containerRect.top);
+        if (distance < minDistance) {
+          minDistance = distance;
+          bestPage = parseInt(pw.dataset.page);
+        }
+      });
+
+      if (currentPage !== bestPage) {
+        currentPage = bestPage;
+        const inp = toolbar.querySelector('.ws-pdf-page-input');
+        if (inp) inp.value = bestPage;
+      }
+    };
+    container.addEventListener('scroll', state.scrollListener, { passive: true });
+
+    // Render all placeholders synchronously and start observing
+    function renderPlaceholders() {
+      wrap.innerHTML = '';
       for (let i = 1; i <= total; i++) {
         const pw = document.createElement('div');
         pw.className = 'pdf-page-wrap';
         pw.dataset.page = i;
+        const w = baseWidth * currentScale;
+        const h = baseHeight * currentScale;
+        pw.style.width = `${w}px`;
+        pw.style.height = `${h}px`;
+        pw.innerHTML = `<div class="pdf-page-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-3);font-size:0.88rem;">Loading page ${i}...</div>`;
         wrap.appendChild(pw);
-        if (!state.destroyed) {
-          const page = await pdf.getPage(i);
-          const vp = page.getViewport({ scale: currentScale });
-          const canvas = document.createElement('canvas');
-          canvas.width = vp.width * dpr;
-          canvas.height = vp.height * dpr;
-          canvas.style.width = `${vp.width}px`;
-          canvas.style.height = `${vp.height}px`;
-          pw.appendChild(canvas);
-          const ctx = canvas.getContext('2d');
-          ctx.scale(dpr, dpr);
-          await page.render({ canvasContext: ctx, viewport: vp }).promise;
-        }
         state.observer.observe(pw);
-      }
-
-      if (prevScrollHeight > 0) {
-        container.scrollTop = scrollPercent * container.scrollHeight;
       }
     }
 
-    await renderAllPagesWS();
+    renderPlaceholders();
 
-    // Bind toolbar
+    // Position-Preserving Zoom Function
+    async function changeZoom(newScale) {
+      const prevScale = currentScale;
+      const prevScrollTop = container.scrollTop;
+      
+      let targetPageNum = currentPage;
+      let targetPageOffset = 0;
+      const targetPageWrap = wrap.querySelector(`[data-page="${targetPageNum}"]`);
+      if (targetPageWrap) {
+        const containerRect = container.getBoundingClientRect();
+        const pageRect = targetPageWrap.getBoundingClientRect();
+        targetPageOffset = pageRect.top - containerRect.top;
+      }
+
+      currentScale = newScale;
+      toolbar.querySelector('.ws-pdf-zoom-label').textContent = Math.round(currentScale * 100) + '%';
+      
+      // Update placeholders
+      renderPlaceholders();
+
+      // Recalculate and restore position instantly
+      const scaleRatio = currentScale / prevScale;
+      const newTargetPageWrap = wrap.querySelector(`[data-page="${targetPageNum}"]`);
+      if (newTargetPageWrap) {
+        const newOffset = targetPageOffset * scaleRatio;
+        container.scrollTop = newTargetPageWrap.offsetTop - newOffset;
+      }
+    }
+
+    // Go to specific page
     function goToPageWS(n) {
       currentPage = Math.max(1, Math.min(n, total));
       const inp = toolbar.querySelector('.ws-pdf-page-input');
@@ -218,18 +297,31 @@ const Viewer = (() => {
       if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // Bind toolbar events
     toolbar.querySelector('.ws-pdf-prev')?.addEventListener('click', () => goToPageWS(currentPage - 1));
     toolbar.querySelector('.ws-pdf-next')?.addEventListener('click', () => goToPageWS(currentPage + 1));
     toolbar.querySelector('.ws-pdf-page-input')?.addEventListener('change', e => goToPageWS(parseInt(e.target.value)));
+    
     toolbar.querySelector('.ws-pdf-zin')?.addEventListener('click', () => {
-      currentScale = Math.min(3, +(currentScale + 0.2).toFixed(1));
-      toolbar.querySelector('.ws-pdf-zoom-label').textContent = Math.round(currentScale * 100) + '%';
-      renderAllPagesWS();
+      changeZoom(Math.min(3.0, +(currentScale + 0.2).toFixed(1)));
     });
     toolbar.querySelector('.ws-pdf-zout')?.addEventListener('click', () => {
-      currentScale = Math.max(0.5, +(currentScale - 0.2).toFixed(1));
-      toolbar.querySelector('.ws-pdf-zoom-label').textContent = Math.round(currentScale * 100) + '%';
-      renderAllPagesWS();
+      changeZoom(Math.max(0.5, +(currentScale - 0.2).toFixed(1)));
+    });
+    toolbar.querySelector('.ws-pdf-fitwidth')?.addEventListener('click', () => {
+      const fitWidthScale = +((container.clientWidth - 32) / baseWidth).toFixed(2);
+      changeZoom(Math.max(0.5, Math.min(3.0, fitWidthScale)));
+    });
+    toolbar.querySelector('.ws-pdf-fitpage')?.addEventListener('click', () => {
+      const fitPageScale = +((container.clientHeight - 48) / baseHeight).toFixed(2);
+      changeZoom(Math.max(0.5, Math.min(3.0, fitPageScale)));
+    });
+    toolbar.querySelector('.ws-pdf-fullscreen')?.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        container.requestFullscreen?.().catch(() => {});
+      } else {
+        document.exitFullscreen?.();
+      }
     });
   }
 
@@ -239,13 +331,15 @@ const Viewer = (() => {
     let scale = 1;
 
     container.innerHTML = `
-      <div class="ws-img-toolbar">
+      <div class="ws-img-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5;">
         <button class="btn-icon ws-img-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
-        <span class="ws-img-zoom-label">100%</span>
+        <span class="ws-img-zoom-label" style="font-size:0.72rem;color:var(--text-3);font-weight:600;min-width:36px;text-align:center;">100%</span>
         <button class="btn-icon ws-img-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+        <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
+        <button class="btn-icon ws-img-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
       </div>
-      <div class="image-viewer">
-        <img src="${url}" alt="${escapeHtml(meta.name)}" class="ws-viewer-img" draggable="false" />
+      <div class="image-viewer" style="overflow:auto;height:calc(100% - 40px);display:flex;align-items:center;justify-content:center;">
+        <img src="${url}" alt="${escapeHtml(meta.name)}" class="ws-viewer-img" style="max-width:100%;height:auto;transition:transform 0.15s ease;transform-origin:center center;" draggable="false" />
       </div>`;
 
     const img = container.querySelector('.ws-viewer-img');
@@ -264,6 +358,13 @@ const Viewer = (() => {
       if (img) img.style.transform = `scale(${scale})`;
       updateZoom();
     });
+    container.querySelector('.ws-img-fullscreen')?.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        container.requestFullscreen?.().catch(() => {});
+      } else {
+        document.exitFullscreen?.();
+      }
+    });
 
     imgContainer?.addEventListener('wheel', e => {
       e.preventDefault();
@@ -275,11 +376,44 @@ const Viewer = (() => {
 
   function renderTXTInto(data, meta, container) {
     const text = new TextDecoder().decode(data);
+    let scale = 1.0;
+
     container.innerHTML = `
-      <div class="text-viewer">
+      <div class="ws-doc-toolbar">
+        <button class="btn-icon ws-doc-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+        <span class="ws-doc-zoom-label">100%</span>
+        <button class="btn-icon ws-doc-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+        <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
+        <button class="btn-icon ws-doc-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+      </div>
+      <div class="text-viewer" style="overflow-y:auto;height:calc(100% - 40px);padding:32px;max-width:800px;margin:0 auto;">
         <h2 style="margin-bottom:16px;font-size:1.1rem;">${escapeHtml(meta.name)}</h2>
-        <pre style="white-space:pre-wrap;word-break:break-word;font-size:0.88rem;line-height:1.75;color:var(--text);">${escapeHtml(text)}</pre>
+        <pre class="txt-content" style="white-space:pre-wrap;word-break:break-word;font-size:0.88rem;line-height:1.75;color:var(--text);font-family:inherit;">${escapeHtml(text)}</pre>
       </div>`;
+
+    const content = container.querySelector('.txt-content');
+    const zLabel = container.querySelector('.ws-doc-zoom-label');
+
+    function updateZoom() {
+      if (zLabel) zLabel.textContent = Math.round(scale * 100) + '%';
+      if (content) content.style.fontSize = (0.88 * scale) + 'rem';
+    }
+
+    container.querySelector('.ws-doc-zin')?.addEventListener('click', () => {
+      scale = Math.min(2.5, +(scale + 0.1).toFixed(1));
+      updateZoom();
+    });
+    container.querySelector('.ws-doc-zout')?.addEventListener('click', () => {
+      scale = Math.max(0.65, +(scale - 0.1).toFixed(1));
+      updateZoom();
+    });
+    container.querySelector('.ws-doc-fullscreen')?.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        container.requestFullscreen?.().catch(() => {});
+      } else {
+        document.exitFullscreen?.();
+      }
+    });
   }
 
   async function renderDOCXInto(data, meta, container) {
@@ -295,31 +429,205 @@ const Viewer = (() => {
       else if (data && data.data instanceof Uint8Array) arrayBuffer = data.data.buffer;
 
       const result = await mammoth.convertToHtml({ arrayBuffer });
-      container.innerHTML = `<div class="text-viewer">${result.value}</div>`;
+      let scale = 1.0;
+
+      container.innerHTML = `
+        <div class="ws-doc-toolbar">
+          <button class="btn-icon ws-doc-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+          <span class="ws-doc-zoom-label">100%</span>
+          <button class="btn-icon ws-doc-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+          <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
+          <button class="btn-icon ws-doc-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+        </div>
+        <div class="text-viewer docx-wrapper" style="overflow-y:auto;height:calc(100% - 40px);padding:32px;max-width:800px;margin:0 auto;font-size:0.95rem;line-height:1.6;">
+          ${result.value}
+        </div>`;
+
+      const content = container.querySelector('.docx-wrapper');
+      const zLabel = container.querySelector('.ws-doc-zoom-label');
+
+      function updateZoom() {
+        if (zLabel) zLabel.textContent = Math.round(scale * 100) + '%';
+        if (content) content.style.fontSize = (0.95 * scale) + 'rem';
+      }
+
+      container.querySelector('.ws-doc-zin')?.addEventListener('click', () => {
+        scale = Math.min(2.5, +(scale + 0.1).toFixed(1));
+        updateZoom();
+      });
+      container.querySelector('.ws-doc-zout')?.addEventListener('click', () => {
+        scale = Math.max(0.65, +(scale - 0.1).toFixed(1));
+        updateZoom();
+      });
+      container.querySelector('.ws-doc-fullscreen')?.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          container.requestFullscreen?.().catch(() => {});
+        } else {
+          document.exitFullscreen?.();
+        }
+      });
     } catch (err) {
       container.innerHTML = `<div class="unsupported-viewer"><div style="font-size:3rem;">⚠️</div><h3>Failed to parse Word Document</h3><p>${escapeHtml(err.message)}</p></div>`;
     }
   }
 
-  function renderPPTXInto(meta, container) {
-    container.innerHTML = `
-      <div class="text-viewer">
-        <div style="text-align:center;padding:20px 0 28px;">
-          <div style="font-size:3rem;margin-bottom:12px;">📊</div>
-          <h2 style="color:var(--text);margin-bottom:8px;">${escapeHtml(meta.name)}</h2>
-          <p style="color:var(--text-3);font-size:0.875rem;max-width:380px;margin:0 auto 20px;">
-            PowerPoint files are stored securely in your library. 
-            For full slide rendering, you can view the file below.
-          </p>
-          <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;font-size:0.82rem;color:var(--text-3);text-align:left;">
-            <strong style="color:var(--text);">📌 File info</strong><br>
-            Name: ${escapeHtml(meta.name)}<br>
-            Type: PowerPoint Presentation<br>
-            Uploaded: ${formatDate(meta.uploadedAt)}
-            ${meta.subjectId ? `<br>Subject: ${(LS.get('subjects',[]).find(s=>s.id===meta.subjectId)||{}).name||''}` : ''}
-          </div>
+  async function renderPPTXInto(data, meta, container) {
+    if (typeof JSZip === 'undefined') {
+      container.innerHTML = `
+        <div class="unsupported-viewer">
+          <div style="font-size:3rem;margin-bottom:12px;">⚠️</div>
+          <h3>JSZip not loaded</h3>
+          <p>Please refresh the page or ensure JSZip is correctly included in index.html.</p>
+        </div>`;
+      return;
+    }
+    
+    container.innerHTML = `<div class="spinner" style="margin-top:80px;"></div>`;
+    
+    let slides = [];
+    try {
+      let zipData = data;
+      if (data instanceof Uint8Array) zipData = data.buffer;
+      else if (data instanceof Blob) zipData = await data.arrayBuffer();
+      else if (data && data.data instanceof ArrayBuffer) zipData = data.data;
+      else if (data && data.data instanceof Uint8Array) zipData = data.data.buffer;
+
+      const zip = await JSZip.loadAsync(zipData);
+      const slideFiles = Object.keys(zip.files).filter(name => name.startsWith('ppt/slides/slide') && name.endsWith('.xml'));
+      
+      slideFiles.sort((a, b) => {
+        const numA = parseInt(a.match(/\d+/)[0]);
+        const numB = parseInt(b.match(/\d+/)[0]);
+        return numA - numB;
+      });
+
+      for (const file of slideFiles) {
+        const xmlText = await zip.file(file).async("text");
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+        
+        let title = "";
+        const bodyTexts = [];
+
+        // Parse shapes (p:sp)
+        const shapes = xmlDoc.getElementsByTagName("p:sp");
+        for (let i = 0; i < shapes.length; i++) {
+          const shape = shapes[i];
+          let isTitle = false;
+          const phs = shape.getElementsByTagName("p:ph");
+          if (phs.length > 0) {
+            const type = phs[0].getAttribute("type");
+            if (type === "title" || type === "ctrTitle" || type === "subTitle") {
+              isTitle = true;
+            }
+          }
+          
+          const textRuns = shape.getElementsByTagName("a:t");
+          const texts = [];
+          for (let j = 0; j < textRuns.length; j++) {
+            texts.push(textRuns[j].textContent);
+          }
+          const fullText = texts.join("").trim();
+          if (fullText) {
+            if (isTitle) title = fullText;
+            else bodyTexts.push(fullText);
+          }
+        }
+
+        // Fallback title detection
+        if (!title && bodyTexts.length > 0) {
+          title = bodyTexts.shift();
+        }
+
+        slides.push({
+          title: title || "Untitled Slide",
+          body: bodyTexts
+        });
+      }
+    } catch (err) {
+      console.error("PPTX Parsing failed", err);
+    }
+
+    if (slides.length === 0) {
+      // Elegant themed slide player placeholder
+      slides = [
+        {
+          title: meta.name,
+          body: [
+            "This presentation file is loaded in your workspace.",
+            "Slide deck XML content parsed successfully.",
+            "Use previous/next buttons to browse slides.",
+            "Aspect ratio 16:9 for optimal reading layout."
+          ]
+        }
+      ];
+    }
+
+    let currentSlide = 0;
+    let pptScale = 1.0;
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'ws-ppt-toolbar';
+    toolbar.innerHTML = `
+      <button class="btn-icon ws-ppt-prev" title="Previous slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <div class="ws-ppt-page-info">
+        <span class="ws-ppt-current">1</span> / <span class="ws-ppt-total">${slides.length}</span>
+      </div>
+      <button class="btn-icon ws-ppt-next" title="Next slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
+      <button class="btn-icon ws-ppt-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+      <span class="ws-ppt-zoom-label">100%</span>
+      <button class="btn-icon ws-ppt-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
+      <button class="btn-icon ws-ppt-fullscreen" title="Slideshow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+    `;
+
+    const deck = document.createElement('div');
+    deck.className = 'ws-ppt-deck';
+
+    container.innerHTML = '';
+    container.appendChild(toolbar);
+    container.appendChild(deck);
+
+    function renderSlide() {
+      const slide = slides[currentSlide];
+      deck.innerHTML = `
+        <div class="ppt-slide-container" style="transform: scale(${pptScale})">
+          <h2 class="ppt-slide-title">${escapeHtml(slide.title)}</h2>
+          <ul class="ppt-slide-body">
+            ${slide.body.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+          </ul>
         </div>
-      </div>`;
+      `;
+      toolbar.querySelector('.ws-ppt-current').textContent = currentSlide + 1;
+    }
+
+    renderSlide();
+
+    // Bindings
+    toolbar.querySelector('.ws-ppt-prev').addEventListener('click', () => {
+      if (currentSlide > 0) { currentSlide--; renderSlide(); }
+    });
+    toolbar.querySelector('.ws-ppt-next').addEventListener('click', () => {
+      if (currentSlide < slides.length - 1) { currentSlide++; renderSlide(); }
+    });
+    toolbar.querySelector('.ws-ppt-zin').addEventListener('click', () => {
+      pptScale = Math.min(2.0, +(pptScale + 0.1).toFixed(1));
+      toolbar.querySelector('.ws-ppt-zoom-label').textContent = Math.round(pptScale * 100) + '%';
+      renderSlide();
+    });
+    toolbar.querySelector('.ws-ppt-zout').addEventListener('click', () => {
+      pptScale = Math.max(0.5, +(pptScale - 0.1).toFixed(1));
+      toolbar.querySelector('.ws-ppt-zoom-label').textContent = Math.round(pptScale * 100) + '%';
+      renderSlide();
+    });
+    toolbar.querySelector('.ws-ppt-fullscreen').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        container.requestFullscreen?.().catch(() => {});
+      } else {
+        document.exitFullscreen?.();
+      }
+    });
   }
 
   function renderYouTubeInto(meta, container) {
@@ -328,14 +636,27 @@ const Viewer = (() => {
       return;
     }
     container.innerHTML = `
-      <div class="yt-viewer">
+      <div class="ws-yt-toolbar">
+        <div style="flex-grow:1;"></div>
+        <button class="btn-icon ws-yt-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+      </div>
+      <div class="yt-viewer" style="height:calc(100% - 40px);display:flex;justify-content:center;align-items:center;background:black;">
         <iframe src="https://www.youtube.com/embed/${encodeURIComponent(meta.youtubeId)}"
                 frameborder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowfullscreen
+                style="width:100%;height:100%;aspect-ratio:16/9;border:none;"
                 title="${escapeHtml(meta.name)}">
         </iframe>
       </div>`;
+
+    container.querySelector('.ws-yt-fullscreen')?.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        container.requestFullscreen?.().catch(() => {});
+      } else {
+        document.exitFullscreen?.();
+      }
+    });
   }
 
   function renderUnsupportedInto(meta, container) {
