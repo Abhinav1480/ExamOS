@@ -13,6 +13,7 @@ const Viewer = (() => {
   let thumbsVisible = false;
   let currentFileId = null;
   let pdfScrollObserver = null;
+  let imageAbortController = null;
   const CIRCUMFERENCE = 553;
 
   /* ── Worker ─────────────────────────────────────────── */
@@ -39,6 +40,12 @@ const Viewer = (() => {
     document.body.classList.add('modal-open');
     el('viewer-filename').textContent = meta.name;
     el('viewer-main').innerHTML = `<div class="spinner" style="margin-top:80px;"></div>`;
+    el('viewer-main').style.cursor = 'default';
+
+    if (imageAbortController) {
+      imageAbortController.abort();
+      imageAbortController = null;
+    }
 
     // Hide all controls
     el('pdf-controls').classList.add('hidden');
@@ -214,14 +221,25 @@ const Viewer = (() => {
                 textLayerDiv.className = 'textLayer';
                 textLayerDiv.style.width = `${vp.width}px`;
                 textLayerDiv.style.height = `${vp.height}px`;
+                textLayerDiv.style.setProperty('--scale-factor', vp.scale.toString());
                 pw.appendChild(textLayerDiv);
 
-                pdfjsLib.renderTextLayer({
-                  textContent: textContent,
-                  container: textLayerDiv,
-                  viewport: vp,
-                  textDivs: []
-                });
+                if (typeof pdfjsLib.TextLayer !== 'undefined') {
+                  const textLayer = new pdfjsLib.TextLayer({
+                    textContentSource: textContent,
+                    container: textLayerDiv,
+                    viewport: vp
+                  });
+                  await textLayer.render();
+                } else if (typeof pdfjsLib.renderTextLayer !== 'undefined') {
+                  const renderTask = pdfjsLib.renderTextLayer({
+                    textContent: textContent,
+                    container: textLayerDiv,
+                    viewport: vp,
+                    textDivs: []
+                  });
+                  await renderTask.promise;
+                }
               } catch (e) {
                 console.warn('Text layer render failed for page', pageNum, e);
               }
@@ -805,14 +823,25 @@ const Viewer = (() => {
       textLayerDiv.className = 'textLayer';
       textLayerDiv.style.width = `${vp.width}px`;
       textLayerDiv.style.height = `${vp.height}px`;
+      textLayerDiv.style.setProperty('--scale-factor', vp.scale.toString());
       container.appendChild(textLayerDiv);
 
-      pdfjsLib.renderTextLayer({
-        textContent: textContent,
-        container: textLayerDiv,
-        viewport: vp,
-        textDivs: []
-      });
+      if (typeof pdfjsLib.TextLayer !== 'undefined') {
+        const textLayer = new pdfjsLib.TextLayer({
+          textContentSource: textContent,
+          container: textLayerDiv,
+          viewport: vp
+        });
+        await textLayer.render();
+      } else if (typeof pdfjsLib.renderTextLayer !== 'undefined') {
+        const renderTask = pdfjsLib.renderTextLayer({
+          textContent: textContent,
+          container: textLayerDiv,
+          viewport: vp,
+          textDivs: []
+        });
+        await renderTask.promise;
+      }
     } catch (e) {
       console.warn('Text layer render failed for page', pageNum, e);
     }
@@ -910,12 +939,18 @@ const Viewer = (() => {
     const img = document.getElementById('viewer-img');
     let isDragging = false, startX, startY, scrollLeft, scrollTop;
 
+    if (imageAbortController) {
+      imageAbortController.abort();
+    }
+    imageAbortController = new AbortController();
+    const { signal } = imageAbortController;
+
     main.addEventListener('wheel', e => {
       e.preventDefault();
       imgScale = Math.max(0.3, Math.min(5, imgScale - e.deltaY * 0.002));
       img.style.transform = `scale(${imgScale})`;
       updateImgZoom();
-    }, { passive: false });
+    }, { passive: false, signal });
 
     main.addEventListener('mousedown', e => {
       isDragging = true;
@@ -924,13 +959,18 @@ const Viewer = (() => {
       scrollLeft = main.scrollLeft;
       scrollTop = main.scrollTop;
       main.style.cursor = 'grabbing';
-    });
-    main.addEventListener('mouseup', () => { isDragging = false; main.style.cursor = 'default'; });
+    }, { signal });
+
+    main.addEventListener('mouseup', () => { 
+      isDragging = false; 
+      main.style.cursor = 'default'; 
+    }, { signal });
+
     main.addEventListener('mousemove', e => {
       if (!isDragging) return;
       main.scrollLeft = scrollLeft - (e.pageX - main.offsetLeft - startX);
       main.scrollTop  = scrollTop  - (e.pageY - main.offsetTop  - startY);
-    });
+    }, { signal });
   }
 
   function changeImgScale(delta) {
@@ -1048,6 +1088,11 @@ const Viewer = (() => {
     if (pdfScrollObserver) {
       pdfScrollObserver.disconnect();
       pdfScrollObserver = null;
+    }
+    if (imageAbortController) {
+      imageAbortController.abort();
+      imageAbortController = null;
+      el('viewer-main').style.cursor = 'default';
     }
     el('pdf-thumbs-panel').classList.add('hidden');
     el('viewer-main').innerHTML = '';

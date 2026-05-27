@@ -1151,6 +1151,11 @@ body.modal-open {
 
 .pdf-page-wrap canvas { display: block; }
 
+/* Custom selection highlight for text layer */
+.textLayer ::selection {
+  background: rgba(79, 70, 229, 0.35); /* Premium Indigo highlight matching the app theme */
+}
+
 /* Text/DOCX viewer */
 .text-viewer {
   background: var(--surface);
