@@ -135,6 +135,35 @@ const Auth = (() => {
 
   function getCurrentUser() { return getSession(); }
 
+  const CLOUD_USERS_BUCKET = 'examos_v2_users_bucket_5839';
+
+  async function saveUserToCloud(user) {
+    try {
+      const emailHash = await hashPassword(user.email);
+      await fetch(`https://kvdb.io/${CLOUD_USERS_BUCKET}/${emailHash}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(user)
+      });
+    } catch (e) {
+      console.warn("Could not back up user to cloud:", e);
+    }
+  }
+
+  async function fetchUserFromCloud(email) {
+    try {
+      const emailHash = await hashPassword(email.toLowerCase().trim());
+      const res = await fetch(`https://kvdb.io/${CLOUD_USERS_BUCKET}/${emailHash}`);
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+    } catch (e) {
+      console.warn("Could not fetch user from cloud:", e);
+    }
+    return null;
+  }
+
   /* ── Signup ─────────────────────────────────────────── */
   async function signup(name, email, password) {
     name = name.trim(); email = email.trim().toLowerCase();
@@ -142,14 +171,23 @@ const Auth = (() => {
     if (!name) throw new Error('Please enter your name.');
     if (!email || !email.includes('@')) throw new Error('Please enter a valid email.');
     if (password.length < 6) throw new Error('Password must be at least 6 characters.');
-    if (findUserByEmail(email)) throw new Error('An account with this email already exists.');
+    
+    let user = findUserByEmail(email);
+    if (!user) {
+      user = await fetchUserFromCloud(email);
+    }
+    if (user) throw new Error('An account with this email already exists.');
 
     const users = getUsers();
     const id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
     const hash = await hashPassword(password);
+    const newUser = { id, name, email, hash, createdAt: new Date().toISOString() };
 
-    users.push({ id, name, email, hash, createdAt: new Date().toISOString() });
+    users.push(newUser);
     saveUsers(users);
+
+    saveUserToCloud(newUser).catch(console.error);
+
     return { id, name, email };
   }
 
@@ -159,19 +197,39 @@ const Auth = (() => {
     if (!email) throw new Error('Please enter your email.');
     if (!password) throw new Error('Please enter your password.');
 
-    const user = findUserByEmail(email);
+    let user = findUserByEmail(email);
+    
+    if (!user) {
+      user = await fetchUserFromCloud(email);
+      if (user) {
+        const users = getUsers();
+        users.push(user);
+        saveUsers(users);
+      }
+    }
+
     if (!user) throw new Error('No account found with this email.');
 
     const hash = await hashPassword(password);
     if (hash !== user.hash) throw new Error('Incorrect password.');
 
+    saveUserToCloud(user).catch(console.error);
+
     return user;
   }
 
   /* ── Forgot password ────────────────────────────────── */
-  function lookupAccount(email) {
+  async function lookupAccount(email) {
     email = email.trim().toLowerCase();
-    const user = findUserByEmail(email);
+    let user = findUserByEmail(email);
+    if (!user) {
+      user = await fetchUserFromCloud(email);
+      if (user) {
+        const users = getUsers();
+        users.push(user);
+        saveUsers(users);
+      }
+    }
     if (!user) throw new Error('No account found with this email address.');
     return user;
   }
@@ -277,6 +335,12 @@ const Auth = (() => {
     try {
       const user = await login(email, password);
       saveSession(user, remember);
+      
+      if (typeof CloudSync !== 'undefined') {
+        setBtnLoading(btn, true, 'Syncing your workspace…');
+        await CloudSync.pull(user);
+      }
+
       showApp(user);
     } catch (err) {
       showError('login-error', err.message);
@@ -307,16 +371,20 @@ const Auth = (() => {
     }
   }
 
-  function handleForgot() {
+  async function handleForgot() {
     const email = document.getElementById('forgot-email').value;
+    const btn = document.getElementById('forgot-btn');
+    setBtnLoading(btn, true, 'Searching…');
     try {
-      const user = lookupAccount(email);
-      showError('forgot-error', `✅ Account found: ${user.name}. Since this is a local app, passwords are stored securely and cannot be emailed. Please try to remember your password or create a new account.`);
+      const user = await lookupAccount(email);
+      showError('forgot-error', `✅ Account found: ${user.name}. Since this is a private offline-first app, passwords are stored securely client-side and cannot be reset. Please try to remember your password or create a new account.`);
       document.getElementById('forgot-error').style.background = 'rgba(16,185,129,0.1)';
       document.getElementById('forgot-error').style.borderColor = 'rgba(16,185,129,0.3)';
       document.getElementById('forgot-error').style.color = '#059669';
     } catch (err) {
       showError('forgot-error', err.message);
+    } finally {
+      setBtnLoading(btn, false, 'Look up account');
     }
   }
 

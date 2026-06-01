@@ -24,7 +24,16 @@ const App = (() => {
     document.querySelectorAll('.nav-link').forEach(l => l.classList.toggle('active', l.dataset.view === view));
     document.querySelectorAll('.bn-item').forEach(i => i.classList.toggle('active', i.dataset.view === view));
     document.getElementById('topbar-title').textContent = TITLES[view] || view;
-    closeSidebar();
+
+    // Auto-collapse sidebar for workspace/document views
+    const autoCollapseViews = ['workspace', 'library', 'notes'];
+    if (autoCollapseViews.includes(view)) {
+      Sidebar.autoCollapse();
+    } else {
+      // On mobile: close drawer after any navigation
+      if (typeof Sidebar !== 'undefined' && window.innerWidth <= 768) Sidebar.close();
+    }
+
     currentView = view;
     if (view === 'dashboard') refreshDashboard();
     if (view === 'library') renderLibrary();
@@ -35,16 +44,98 @@ const App = (() => {
     if (view === 'workspace') Workspace.activate();
   }
 
-  /* ── Sidebar mobile ──────────────────────────────────── */
-  function openSidebar() {
-    document.getElementById('sidebar').classList.add('open');
-    document.getElementById('sidebar-overlay').classList.remove('hidden');
-  }
+  /* ── Sidebar State Manager ────────────────────────────── */
+  const Sidebar = (() => {
+    const COLLAPSED_KEY = 'sidebar_collapsed';
+    let _collapsed = LS.get(COLLAPSED_KEY, false);
 
-  function closeSidebar() {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('sidebar-overlay').classList.add('hidden');
-  }
+    function isMobile() {
+      return window.innerWidth <= 768;
+    }
+
+    function applyState() {
+      const sidebar   = document.getElementById('sidebar');
+      const overlay   = document.getElementById('sidebar-overlay');
+      const appEl     = document.getElementById('app');
+
+      if (isMobile()) {
+        // Mobile: drawer mode (slide in/out)
+        sidebar.classList.remove('collapsed');
+        // Don't change mobile-open here; that's handled by open/close
+        appEl.classList.remove('sidebar-collapsed-layout');
+      } else {
+        // Desktop: icon-only collapse
+        sidebar.classList.toggle('collapsed', _collapsed);
+        sidebar.classList.remove('mobile-open');
+        overlay.classList.remove('active');
+        appEl.classList.toggle('sidebar-collapsed-layout', _collapsed);
+      }
+    }
+
+    function toggle() {
+      if (isMobile()) {
+        // Mobile: toggle drawer
+        const sidebar = document.getElementById('sidebar');
+        const isOpen = sidebar.classList.contains('mobile-open');
+        if (isOpen) close(); else open();
+        return;
+      }
+      _collapsed = !_collapsed;
+      LS.set(COLLAPSED_KEY, _collapsed);
+      applyState();
+    }
+
+    function open() {
+      // Mobile only: slide drawer in
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      sidebar.classList.add('mobile-open');
+      overlay.classList.add('active');
+    }
+
+    function close() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      sidebar.classList.remove('mobile-open');
+      overlay.classList.remove('active');
+    }
+
+    function autoCollapse() {
+      // Auto-collapse on desktop when navigating to document-heavy views
+      if (!isMobile() && !_collapsed) {
+        _collapsed = true;
+        LS.set(COLLAPSED_KEY, _collapsed);
+        applyState();
+      }
+      // Mobile: always close the drawer after navigation
+      if (isMobile()) close();
+    }
+
+    function init() {
+      // Restore persisted state
+      applyState();
+
+      // Sidebar toggle button (hamburger inside sidebar)
+      const toggleBtn = document.getElementById('sidebar-toggle-btn');
+      if (toggleBtn) toggleBtn.addEventListener('click', toggle);
+
+      // Mobile topbar hamburger button
+      const topbarBtn = document.getElementById('topbar-menu-btn');
+      if (topbarBtn) topbarBtn.addEventListener('click', () => {
+        if (isMobile()) open();
+        else toggle();
+      });
+
+      // Overlay click: close on mobile
+      const overlay = document.getElementById('sidebar-overlay');
+      if (overlay) overlay.addEventListener('click', close);
+
+      // Responsive: re-apply state on resize
+      window.addEventListener('resize', () => applyState(), { passive: true });
+    }
+
+    return { init, toggle, open, close, autoCollapse, isCollapsed: () => _collapsed };
+  })();
 
   /* ── Theme ───────────────────────────────────────────── */
   function initTheme() {
@@ -803,6 +894,40 @@ const App = (() => {
 
   /* ── Settings ────────────────────────────────────────── */
   function initSettings() {
+    const syncToggle = document.getElementById('settings-cloud-sync-toggle');
+    const syncNowBtn = document.getElementById('settings-sync-now-btn');
+    const lastSyncLabel = document.getElementById('settings-last-sync');
+
+    if (syncToggle) {
+      syncToggle.checked = CloudSync.isEnabled();
+      syncToggle.addEventListener('change', e => {
+        CloudSync.setEnabled(e.target.checked);
+        showToast(e.target.checked ? 'Cloud sync enabled' : 'Cloud sync disabled', 'info');
+      });
+    }
+
+    if (syncNowBtn) {
+      syncNowBtn.addEventListener('click', async () => {
+        syncNowBtn.disabled = true;
+        const oldTxt = syncNowBtn.textContent;
+        syncNowBtn.textContent = 'Syncing...';
+        try {
+          await CloudSync.push();
+          showToast('Workspace synced to the cloud!', 'success');
+        } catch (err) {
+          showToast('Sync failed: ' + err.message, 'error');
+        } finally {
+          syncNowBtn.disabled = false;
+          syncNowBtn.textContent = oldTxt;
+        }
+      });
+    }
+
+    if (lastSyncLabel) {
+      const lastSync = CloudSync.getLastSync();
+      lastSyncLabel.textContent = lastSync ? `Last synced: ${new Date(lastSync).toLocaleString()}` : 'Last synced: Never';
+    }
+
     document.getElementById('export-btn').addEventListener('click', async () => {
       await DataPortability.export();
       showToast('Data exported!', 'success');
@@ -860,8 +985,9 @@ const App = (() => {
     });
 
     document.getElementById('logo-btn').addEventListener('click', () => navigate('dashboard'));
-    document.getElementById('topbar-menu-btn').addEventListener('click', openSidebar);
-    document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
+
+    // Initialize the collapsible sidebar (handles toggle, mobile drawer, resize)
+    Sidebar.init();
   }
 
   /* ── Global search ───────────────────────────────────── */
@@ -1576,10 +1702,22 @@ const App = (() => {
     const wsPicker = document.getElementById('ws-open-picker-btn');
     if (wsPicker) wsPicker.addEventListener('click', () => {
       Workspace.openFile._picker ? Workspace.openFile._picker() : null;
-      // Fallback: navigate to library
       const addBtn = document.getElementById('ws-add-tab-btn');
       if (addBtn) addBtn.click();
     });
+
+    // Passive Cloud Sync Pull
+    if (typeof CloudSync !== 'undefined') {
+      const user = Auth.getCurrentUser();
+      if (user) {
+        CloudSync.updateSyncUI(CloudSync.isEnabled() ? 'synced' : 'disabled', CloudSync.isEnabled() ? 'Synced' : 'Sync Off');
+        CloudSync.pull(user).then(() => {
+          refreshDashboard();
+          renderLibrary();
+          if (typeof Notes !== 'undefined' && Notes.load) Notes.load().catch(console.error);
+        }).catch(console.error);
+      }
+    }
   }
 
   /* ── Bootstrap ───────────────────────────────────────── */

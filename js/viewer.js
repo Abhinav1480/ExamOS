@@ -58,7 +58,9 @@ const Viewer = (() => {
         await openYouTube(meta);
       } else {
         const fileObj = await FileStore.get(fileId);
-        if (!fileObj || !fileObj.data) throw new Error('File data not found');
+        if (!fileObj || !fileObj.data) {
+          throw new Error('This file was uploaded on another device and is not cached locally. To open it, please import your backup in Settings, or re-upload it on this device.');
+        }
 
         if (meta.type === 'pdf') await openPDF(fileObj.data, meta);
         else if (meta.type === 'image') await openImage(fileObj.data, meta);
@@ -105,7 +107,9 @@ const Viewer = (() => {
         renderYouTubeInto(meta, containerEl);
       } else {
         const fileObj = await FileStore.get(fileId);
-        if (!fileObj || !fileObj.data) throw new Error('File data not found');
+        if (!fileObj || !fileObj.data) {
+          throw new Error('This file was uploaded on another device and is not cached locally. To open it, please import your backup in Settings, or re-upload it on this device.');
+        }
         if (state.destroyed) return null;
 
         if (meta.type === 'pdf') await renderPDFInto(fileObj.data, meta, containerEl, state);
