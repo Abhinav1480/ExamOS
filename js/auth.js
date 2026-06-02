@@ -140,7 +140,7 @@ const Auth = (() => {
   async function saveUserToCloud(user) {
     try {
       const emailHash = await hashPassword(user.email);
-      await fetch(`https://kvdb.io/${CLOUD_USERS_BUCKET}/${emailHash}`, {
+      await fetch(`https://mantledb.sh/v2/examos_users_v2/${emailHash}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(user)
@@ -153,7 +153,7 @@ const Auth = (() => {
   async function fetchUserFromCloud(email) {
     try {
       const emailHash = await hashPassword(email.toLowerCase().trim());
-      const res = await fetch(`https://kvdb.io/${CLOUD_USERS_BUCKET}/${emailHash}`);
+      const res = await fetch(`https://mantledb.sh/v2/examos_users_v2/${emailHash}`);
       if (res.ok) {
         const data = await res.json();
         return data;

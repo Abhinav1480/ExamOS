@@ -475,7 +475,7 @@ const CloudSync = {
       const encrypted = encryptPayload(JSON.stringify(syncPayload), user.id);
       const emailHash = await Auth.hashPassword(user.email);
 
-      const res = await fetch(`https://kvdb.io/${CLOUD_DATA_BUCKET}/${emailHash}`, {
+      const res = await fetch(`https://mantledb.sh/v2/examos_data_v2/${emailHash}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: encrypted, syncedAt: syncPayload.syncedAt })
@@ -504,7 +504,7 @@ const CloudSync = {
 
     try {
       const emailHash = await Auth.hashPassword(user.email);
-      const res = await fetch(`https://kvdb.io/${CLOUD_DATA_BUCKET}/${emailHash}`);
+      const res = await fetch(`https://mantledb.sh/v2/examos_data_v2/${emailHash}`);
       if (res.status === 404) {
         console.log("No cloud sync backup found for this user.");
         this.updateSyncUI('synced', 'Synced (Empty)');
