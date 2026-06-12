@@ -137,10 +137,27 @@ const Notes = (() => {
     });
 
     el('note-title').addEventListener('input', schedSave);
-    el('note-content').addEventListener('input', schedSave);
     el('note-label').addEventListener('change', save);
     el('export-note-btn').addEventListener('click', exportNote);
     el('delete-note-btn').addEventListener('click', deleteNote);
+
+    // Strip formatting on paste — always insert plain text only
+    const contentEl = el('note-content');
+    contentEl.addEventListener('paste', e => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, text);
+    });
+
+    // When the editor becomes empty after clearing, reset it fully
+    // so no leftover bold/font-size styles remain
+    contentEl.addEventListener('input', () => {
+      const isEmpty = contentEl.innerText.trim() === '' && contentEl.textContent.trim() === '';
+      if (isEmpty) {
+        contentEl.innerHTML = '';
+      }
+      schedSave();
+    });
   }
 
   async function init() {
