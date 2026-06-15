@@ -402,7 +402,7 @@ const Viewer = (() => {
         <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
         <button class="btn-icon ws-img-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
       </div>
-      <div class="image-viewer" style="overflow:auto;height:calc(100% - 40px);display:flex;align-items:center;justify-content:center;">
+      <div class="image-viewer" style="display:flex;align-items:center;justify-content:center;min-height:calc(100% - 40px);">
         <img src="${url}" alt="${escapeHtml(meta.name)}" class="ws-viewer-img" style="max-width:100%;height:auto;transition:transform 0.15s ease;transform-origin:center center;${scale !== 1 ? 'transform:scale(' + scale + ');' : ''}" draggable="false" />
       </div>`;
 
@@ -450,7 +450,7 @@ const Viewer = (() => {
         <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
         <button class="btn-icon ws-doc-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
       </div>
-      <div class="text-viewer" style="overflow-y:auto;height:calc(100% - 40px);padding:32px;max-width:800px;margin:0 auto;">
+      <div class="text-viewer" style="padding:32px;max-width:800px;margin:0 auto;min-height:calc(100% - 40px);">
         <h2 style="margin-bottom:16px;font-size:1.1rem;">${escapeHtml(meta.name)}</h2>
         <pre class="txt-content" style="white-space:pre-wrap;word-break:break-word;font-size:${(0.88 * scale).toFixed(2)}rem;line-height:1.75;color:var(--text);font-family:inherit;">${escapeHtml(text)}</pre>
       </div>`;
@@ -503,7 +503,7 @@ const Viewer = (() => {
           <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
           <button class="btn-icon ws-doc-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
         </div>
-        <div class="text-viewer docx-wrapper" style="overflow-y:auto;height:calc(100% - 40px);padding:32px;max-width:800px;margin:0 auto;font-size:${(0.95 * scale).toFixed(2)}rem;line-height:1.6;">
+        <div class="text-viewer docx-wrapper" style="padding:32px;max-width:800px;margin:0 auto;min-height:calc(100% - 40px);font-size:${(0.95 * scale).toFixed(2)}rem;line-height:1.6;">
           ${result.value}
         </div>`;
 
