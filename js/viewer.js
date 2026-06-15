@@ -93,8 +93,9 @@ const Viewer = (() => {
      renderInto() — Render a file into an arbitrary container
      Used by Workspace for multi-tab rendering.
      Returns a cleanup function to dispose resources.
+     Accepts optional savedState to restore zoom/page/scroll.
      ══════════════════════════════════════════════════════ */
-  async function renderInto(fileId, containerEl) {
+  async function renderInto(fileId, containerEl, savedState = null) {
     const meta = FileMeta.getById(fileId);
     if (!meta) { containerEl.innerHTML = `<div class="ws-render-error">File not found</div>`; return null; }
 
@@ -112,11 +113,11 @@ const Viewer = (() => {
         }
         if (state.destroyed) return null;
 
-        if (meta.type === 'pdf') await renderPDFInto(fileObj.data, meta, containerEl, state);
-        else if (meta.type === 'image') renderImageInto(fileObj.data, meta, containerEl);
-        else if (meta.type === 'txt') renderTXTInto(fileObj.data, meta, containerEl);
-        else if (meta.type === 'docx' || meta.type === 'doc') await renderDOCXInto(fileObj.data, meta, containerEl);
-        else if (meta.type === 'pptx' || meta.type === 'ppt') await renderPPTXInto(fileObj.data, meta, containerEl);
+        if (meta.type === 'pdf') await renderPDFInto(fileObj.data, meta, containerEl, state, savedState);
+        else if (meta.type === 'image') renderImageInto(fileObj.data, meta, containerEl, savedState);
+        else if (meta.type === 'txt') renderTXTInto(fileObj.data, meta, containerEl, savedState);
+        else if (meta.type === 'docx' || meta.type === 'doc') await renderDOCXInto(fileObj.data, meta, containerEl, savedState);
+        else if (meta.type === 'pptx' || meta.type === 'ppt') await renderPPTXInto(fileObj.data, meta, containerEl, savedState);
         else renderUnsupportedInto(meta, containerEl);
       }
     } catch (err) {
@@ -141,7 +142,7 @@ const Viewer = (() => {
 
   /* ── Standalone renderers (for Workspace) ──────────── */
 
-  async function renderPDFInto(data, meta, container, state) {
+  async function renderPDFInto(data, meta, container, state, savedState) {
     if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js not loaded');
 
     const loadingTask = pdfjsLib.getDocument({ data: data.slice(0) });
@@ -159,8 +160,8 @@ const Viewer = (() => {
     const baseHeight = firstVp.height;
     const aspectRatio = baseWidth / baseHeight;
 
-    let currentScale = 1.3;
-    let currentPage = 1;
+    let currentScale = (savedState && savedState.zoomLevel) ? savedState.zoomLevel : 1.3;
+    let currentPage = (savedState && savedState.currentPage) ? savedState.currentPage : 1;
 
     // Build toolbar
     const toolbar = document.createElement('div');
@@ -168,13 +169,13 @@ const Viewer = (() => {
     toolbar.innerHTML = `
       <button class="btn-icon ws-pdf-prev" title="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
       <div class="ws-pdf-page-info">
-        <input class="ws-pdf-page-input" type="number" min="1" max="${total}" value="1" />
+        <input class="ws-pdf-page-input" type="number" min="1" max="${total}" value="${currentPage}" />
         <span>/ ${total}</span>
       </div>
       <button class="btn-icon ws-pdf-next" title="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
       <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
       <button class="btn-icon ws-pdf-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
-      <span class="ws-pdf-zoom-label">130%</span>
+      <span class="ws-pdf-zoom-label">${Math.round(currentScale * 100)}%</span>
       <button class="btn-icon ws-pdf-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
       <button class="btn-icon ws-pdf-fitwidth" title="Fit width" style="font-size:0.82rem;font-weight:600;font-family:inherit;">↔</button>
       <button class="btn-icon ws-pdf-fitpage" title="Fit page" style="font-size:0.82rem;font-weight:600;font-family:inherit;">↕</button>
@@ -312,6 +313,16 @@ const Viewer = (() => {
 
     renderPlaceholders();
 
+    // Restore saved page position after placeholders are rendered
+    if (savedState && savedState.currentPage && savedState.currentPage > 1) {
+      setTimeout(() => {
+        const targetPageEl = wrap.querySelector(`[data-page="${savedState.currentPage}"]`);
+        if (targetPageEl) {
+          targetPageEl.scrollIntoView({ behavior: 'instant', block: 'start' });
+        }
+      }, 50);
+    }
+
     // Position-Preserving Zoom Function
     async function changeZoom(newScale) {
       const prevScale = currentScale;
@@ -378,21 +389,21 @@ const Viewer = (() => {
     });
   }
 
-  function renderImageInto(data, meta, container) {
+  function renderImageInto(data, meta, container, savedState) {
     const blob = new Blob([data]);
     const url = URL.createObjectURL(blob);
-    let scale = 1;
+    let scale = (savedState && savedState.imgScale) ? savedState.imgScale : 1;
 
     container.innerHTML = `
       <div class="ws-img-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5;">
         <button class="btn-icon ws-img-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
-        <span class="ws-img-zoom-label" style="font-size:0.72rem;color:var(--text-3);font-weight:600;min-width:36px;text-align:center;">100%</span>
+        <span class="ws-img-zoom-label" style="font-size:0.72rem;color:var(--text-3);font-weight:600;min-width:36px;text-align:center;">${Math.round(scale * 100)}%</span>
         <button class="btn-icon ws-img-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
         <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
         <button class="btn-icon ws-img-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
       </div>
       <div class="image-viewer" style="overflow:auto;height:calc(100% - 40px);display:flex;align-items:center;justify-content:center;">
-        <img src="${url}" alt="${escapeHtml(meta.name)}" class="ws-viewer-img" style="max-width:100%;height:auto;transition:transform 0.15s ease;transform-origin:center center;" draggable="false" />
+        <img src="${url}" alt="${escapeHtml(meta.name)}" class="ws-viewer-img" style="max-width:100%;height:auto;transition:transform 0.15s ease;transform-origin:center center;${scale !== 1 ? 'transform:scale(' + scale + ');' : ''}" draggable="false" />
       </div>`;
 
     const img = container.querySelector('.ws-viewer-img');
@@ -427,21 +438,21 @@ const Viewer = (() => {
     }, { passive: false });
   }
 
-  function renderTXTInto(data, meta, container) {
+  function renderTXTInto(data, meta, container, savedState) {
     const text = new TextDecoder().decode(data);
-    let scale = 1.0;
+    let scale = (savedState && savedState.docScale) ? savedState.docScale : 1.0;
 
     container.innerHTML = `
       <div class="ws-doc-toolbar">
         <button class="btn-icon ws-doc-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
-        <span class="ws-doc-zoom-label">100%</span>
+        <span class="ws-doc-zoom-label">${Math.round(scale * 100)}%</span>
         <button class="btn-icon ws-doc-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
         <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
         <button class="btn-icon ws-doc-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
       </div>
       <div class="text-viewer" style="overflow-y:auto;height:calc(100% - 40px);padding:32px;max-width:800px;margin:0 auto;">
         <h2 style="margin-bottom:16px;font-size:1.1rem;">${escapeHtml(meta.name)}</h2>
-        <pre class="txt-content" style="white-space:pre-wrap;word-break:break-word;font-size:0.88rem;line-height:1.75;color:var(--text);font-family:inherit;">${escapeHtml(text)}</pre>
+        <pre class="txt-content" style="white-space:pre-wrap;word-break:break-word;font-size:${(0.88 * scale).toFixed(2)}rem;line-height:1.75;color:var(--text);font-family:inherit;">${escapeHtml(text)}</pre>
       </div>`;
 
     const content = container.querySelector('.txt-content');
@@ -469,7 +480,7 @@ const Viewer = (() => {
     });
   }
 
-  async function renderDOCXInto(data, meta, container) {
+  async function renderDOCXInto(data, meta, container, savedState) {
     if (typeof mammoth === 'undefined') {
       container.innerHTML = `<div class="unsupported-viewer"><div style="font-size:3rem;">📝</div><h3>${escapeHtml(meta.name)}</h3><p>Word document viewer loading…<br>Try refreshing if it doesn't load.</p></div>`;
       return;
@@ -482,17 +493,17 @@ const Viewer = (() => {
       else if (data && data.data instanceof Uint8Array) arrayBuffer = data.data.buffer;
 
       const result = await mammoth.convertToHtml({ arrayBuffer });
-      let scale = 1.0;
+      let scale = (savedState && savedState.docScale) ? savedState.docScale : 1.0;
 
       container.innerHTML = `
         <div class="ws-doc-toolbar">
           <button class="btn-icon ws-doc-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
-          <span class="ws-doc-zoom-label">100%</span>
+          <span class="ws-doc-zoom-label">${Math.round(scale * 100)}%</span>
           <button class="btn-icon ws-doc-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
           <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
           <button class="btn-icon ws-doc-fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
         </div>
-        <div class="text-viewer docx-wrapper" style="overflow-y:auto;height:calc(100% - 40px);padding:32px;max-width:800px;margin:0 auto;font-size:0.95rem;line-height:1.6;">
+        <div class="text-viewer docx-wrapper" style="overflow-y:auto;height:calc(100% - 40px);padding:32px;max-width:800px;margin:0 auto;font-size:${(0.95 * scale).toFixed(2)}rem;line-height:1.6;">
           ${result.value}
         </div>`;
 
@@ -524,7 +535,7 @@ const Viewer = (() => {
     }
   }
 
-  async function renderPPTXInto(data, meta, container) {
+  async function renderPPTXInto(data, meta, container, savedState) {
     if (typeof JSZip === 'undefined') {
       container.innerHTML = `
         <div class="unsupported-viewer">
@@ -616,20 +627,20 @@ const Viewer = (() => {
       ];
     }
 
-    let currentSlide = 0;
-    let pptScale = 1.0;
+    let currentSlide = (savedState && savedState.currentPage != null) ? Math.min(savedState.currentPage, slides.length - 1) : 0;
+    let pptScale = (savedState && savedState.zoomLevel) ? savedState.zoomLevel : 1.0;
 
     const toolbar = document.createElement('div');
     toolbar.className = 'ws-ppt-toolbar';
     toolbar.innerHTML = `
       <button class="btn-icon ws-ppt-prev" title="Previous slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
       <div class="ws-ppt-page-info">
-        <span class="ws-ppt-current">1</span> / <span class="ws-ppt-total">${slides.length}</span>
+        <span class="ws-ppt-current">${currentSlide + 1}</span> / <span class="ws-ppt-total">${slides.length}</span>
       </div>
       <button class="btn-icon ws-ppt-next" title="Next slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
       <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
       <button class="btn-icon ws-ppt-zout" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
-      <span class="ws-ppt-zoom-label">100%</span>
+      <span class="ws-ppt-zoom-label">${Math.round(pptScale * 100)}%</span>
       <button class="btn-icon ws-ppt-zin" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
       <div style="width:1px;height:20px;background:var(--border);margin:0 4px;"></div>
       <button class="btn-icon ws-ppt-fullscreen" title="Slideshow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>

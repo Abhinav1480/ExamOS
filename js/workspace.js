@@ -10,7 +10,7 @@ const Workspace = (() => {
   const LS_SPLIT_KEY = 'workspace_split';
 
   /* ── State ──────────────────────────────────────────── */
-  let tabs = []; // { id, fileId, pinned, scrollPos }
+  let tabs = []; // { id, fileId, pinned, scrollPos, viewerState }
   let activeTabId = null;
   let splitMode = false;
   let splitActiveTabId = null; // active tab in right pane
@@ -30,7 +30,11 @@ const Workspace = (() => {
   }
 
   function saveState() {
-    const state = tabs.map(t => ({ id: t.id, fileId: t.fileId, pinned: t.pinned, scrollPos: t.scrollPos || 0 }));
+    const state = tabs.map(t => ({
+      id: t.id, fileId: t.fileId, pinned: t.pinned,
+      scrollPos: t.scrollPos || 0,
+      viewerState: t.viewerState || null
+    }));
     LS.set(LS_KEY, { tabs: state, activeTabId, splitMode, splitActiveTabId, splitRatio });
   }
 
@@ -55,7 +59,8 @@ const Workspace = (() => {
       id: t.id,
       fileId: t.fileId,
       pinned: t.pinned || false,
-      scrollPos: t.scrollPos || 0
+      scrollPos: t.scrollPos || 0,
+      viewerState: t.viewerState || null
     }));
 
     activeTabId = saved.activeTabId && tabs.find(t => t.id === saved.activeTabId) ? saved.activeTabId : tabs[0].id;
@@ -93,7 +98,7 @@ const Workspace = (() => {
       return;
     }
 
-    const tab = { id: genId(), fileId, pinned: false, scrollPos: 0 };
+    const tab = { id: genId(), fileId, pinned: false, scrollPos: 0, viewerState: null };
     tabs.push(tab);
 
     if (opts.splitRight && splitMode) {
@@ -217,6 +222,80 @@ const Workspace = (() => {
     renderEmptyState();
   }
 
+  /* ── Capture viewer state from DOM before switching ── */
+  function captureViewerState(tabId, paneEl) {
+    if (!tabId || !paneEl) return;
+    const tab = tabs.find(t => t.id === tabId);
+    if (!tab) return;
+
+    const state = tab.viewerState || {};
+
+    // Capture scroll position from the correct scrollable element
+    const scrollEl = getScrollableElement(paneEl);
+    if (scrollEl) {
+      tab.scrollPos = scrollEl.scrollTop;
+    }
+    // Also capture container scroll (for PDF which scrolls the pane itself)
+    if (paneEl.scrollTop > 0) {
+      tab.scrollPos = paneEl.scrollTop;
+    }
+
+    // Capture PDF state
+    const pdfZoomLabel = paneEl.querySelector('.ws-pdf-zoom-label');
+    if (pdfZoomLabel) {
+      state.zoomLevel = parseFloat(pdfZoomLabel.textContent) / 100;
+    }
+    const pdfPageInput = paneEl.querySelector('.ws-pdf-page-input');
+    if (pdfPageInput) {
+      state.currentPage = parseInt(pdfPageInput.value) || 1;
+    }
+
+    // Capture Image zoom state
+    const imgZoomLabel = paneEl.querySelector('.ws-img-zoom-label');
+    if (imgZoomLabel) {
+      state.imgScale = parseFloat(imgZoomLabel.textContent) / 100;
+    }
+
+    // Capture TXT/DOCX zoom state
+    const docZoomLabel = paneEl.querySelector('.ws-doc-zoom-label');
+    if (docZoomLabel) {
+      state.docScale = parseFloat(docZoomLabel.textContent) / 100;
+    }
+
+    // Capture PPTX state
+    const pptZoomLabel = paneEl.querySelector('.ws-ppt-zoom-label');
+    if (pptZoomLabel) {
+      state.zoomLevel = parseFloat(pptZoomLabel.textContent) / 100;
+    }
+    const pptCurrent = paneEl.querySelector('.ws-ppt-current');
+    if (pptCurrent) {
+      state.currentPage = parseInt(pptCurrent.textContent) - 1; // 0-indexed for slides
+    }
+
+    // Capture fullscreen state
+    state.fullscreen = !!document.fullscreenElement;
+
+    tab.viewerState = state;
+  }
+
+  /* ── Capture all currently visible panes ──────────── */
+  function captureAllVisibleStates() {
+    // Capture left/full pane
+    const fullPane = el('ws-pane-full');
+    const leftPane = el('ws-pane-left');
+    const rightPane = el('ws-pane-right');
+
+    if (fullPane && activeTabId) {
+      captureViewerState(activeTabId, fullPane);
+    }
+    if (leftPane && activeTabId) {
+      captureViewerState(activeTabId, leftPane);
+    }
+    if (rightPane && splitActiveTabId) {
+      captureViewerState(splitActiveTabId, rightPane);
+    }
+  }
+
   function checkMobile() {
     isMobile = window.innerWidth < 768;
     if (isMobile && splitMode) { splitMode = false; splitActiveTabId = null; saveState(); }
@@ -264,6 +343,8 @@ const Workspace = (() => {
 
       tabEl.addEventListener('click', e => {
         if (e.target.closest('.ws-tab-close')) return;
+        // Capture current state before switching
+        captureAllVisibleStates();
         if (splitMode && e.shiftKey) {
           // Shift+click to assign to right pane
           splitActiveTabId = tabId;
@@ -400,6 +481,9 @@ const Workspace = (() => {
       return;
     }
 
+    // Capture state from currently visible panes before re-rendering
+    captureAllVisibleStates();
+
     evictIfNeeded();
 
     if (splitMode && splitActiveTabId && splitActiveTabId !== activeTabId) {
@@ -435,17 +519,23 @@ const Workspace = (() => {
 
     paneEl.innerHTML = `<div class="spinner" style="margin-top:60px;"></div>`;
 
-    const cleanup = await Viewer.renderInto(tab.fileId, paneEl);
+    // Pass saved viewerState to the renderer for restoration
+    const cleanup = await Viewer.renderInto(tab.fileId, paneEl, tab.viewerState || null);
     if (cleanup) cleanupFns[tabId] = cleanup;
 
     // Get the correct scrollable element (.text-viewer, .image-viewer, or paneEl itself)
     const scrollEl = getScrollableElement(paneEl);
 
-    // Restore scroll position
-    if (tab.scrollPos > 0 && scrollEl) {
+    // Restore scroll position (after a short delay for rendering to complete)
+    if (tab.scrollPos > 0) {
       setTimeout(() => {
-        scrollEl.scrollTop = tab.scrollPos;
-      }, 100);
+        // For PDFs the container itself scrolls, for others the inner element does
+        if (paneEl.scrollTop !== undefined && paneEl.querySelector('.ws-pdf-toolbar')) {
+          paneEl.scrollTop = tab.scrollPos;
+        } else if (scrollEl) {
+          scrollEl.scrollTop = tab.scrollPos;
+        }
+      }, 150);
     }
 
     // Track scroll position for persistence
@@ -455,6 +545,13 @@ const Workspace = (() => {
         debouncedSaveState();
       }, { passive: true });
     }
+    // Also track container scroll for PDFs
+    paneEl.addEventListener('scroll', () => {
+      if (paneEl.querySelector('.ws-pdf-toolbar')) {
+        tab.scrollPos = paneEl.scrollTop;
+        debouncedSaveState();
+      }
+    }, { passive: true });
   }
 
   /* ── Split divider drag ─────────────────────────────── */
@@ -548,6 +645,9 @@ const Workspace = (() => {
       const diff = e.changedTouches[0].clientX - touchStartX;
       if (Math.abs(diff) < 80) return; // minimum swipe distance
 
+      // Capture current state before switching
+      captureAllVisibleStates();
+
       const currentIdx = tabs.findIndex(t => t.id === activeTabId);
       if (diff > 0 && currentIdx > 0) {
         // Swipe right → previous tab
@@ -580,6 +680,8 @@ const Workspace = (() => {
       // Ctrl+Tab / Ctrl+Shift+Tab — cycle tabs
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault();
+        // Capture current state before switching
+        captureAllVisibleStates();
         const idx = tabs.findIndex(t => t.id === activeTabId);
         if (e.shiftKey) {
           activeTabId = tabs[(idx - 1 + tabs.length) % tabs.length].id;

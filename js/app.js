@@ -1676,11 +1676,109 @@ const App = (() => {
     }, 4000);
   }
 
+  async function seedMockFilesIfEmpty() {
+    try {
+      const files = FileMeta.getAll();
+      if (files && files.length > 0) return;
+
+      console.log("Seeding mock files for study environment...");
+      
+      // 1. Text file
+      const txtId = 'mock_txt';
+      const txtMeta = {
+        id: txtId,
+        name: 'Getting_Started.txt',
+        size: 512,
+        type: 'txt',
+        createdAt: new Date().toISOString()
+      };
+      const txtData = new TextEncoder().encode(
+        `Welcome to ExamOS Study Workspace!\n\n` +
+        `Here is how to test the Tab State Persistence:\n` +
+        `1. Open this text file in the workspace.\n` +
+        `2. Zoom in/out using the floating controls.\n` +
+        `3. Notice the premium glassmorphism tabs and frosted-glass toolbars.\n` +
+        `4. Open another document tab (like a PDF or Slide Deck).\n` +
+        `5. Go back to this tab. The zoom level and scroll position are exactly preserved!\n\n` +
+        `ExamOS is offline-first. All your files are stored locally in your browser.`
+      );
+      FileMeta.save(txtMeta);
+      await FileStore.save({ id: txtId, data: txtData });
+
+      // 2. Image file
+      const imgId = 'mock_img';
+      const imgMeta = {
+        id: imgId,
+        name: 'Anatomy_Diagram.png',
+        size: 70,
+        type: 'image',
+        createdAt: new Date().toISOString()
+      };
+      const imgData = new Uint8Array([
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 94, 99, 96, 96, 96, 0, 0, 0, 5, 0, 1, 164, 182, 221, 115, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+      ]);
+      FileMeta.save(imgMeta);
+      await FileStore.save({ id: imgId, data: imgData });
+
+      // 3. PPTX file
+      const pptId = 'mock_pptx';
+      const pptMeta = {
+        id: pptId,
+        name: 'Exam_Preparation_Slides.pptx',
+        size: 100,
+        type: 'pptx',
+        createdAt: new Date().toISOString()
+      };
+      const pptData = new Uint8Array([80, 75, 3, 4, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      FileMeta.save(pptMeta);
+      await FileStore.save({ id: pptId, data: pptData });
+
+      // 4. PDF file
+      const pdfId = 'mock_pdf';
+      const pdfMeta = {
+        id: pdfId,
+        name: 'Study_Guide.pdf',
+        size: 500,
+        type: 'pdf',
+        createdAt: new Date().toISOString()
+      };
+      const pdfString = 
+        "%PDF-1.4\n" +
+        "1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj\n" +
+        "2 0 obj <</Type/Pages/Kids[3 0 R]/Count 1>> endobj\n" +
+        "3 0 obj <</Type/Page/Parent 2 0 R/Resources<<>>/MediaBox[0 0 500 800]/Contents 4 0 R>> endobj\n" +
+        "4 0 obj <</Length 22>> stream\n" +
+        "BT /F1 24 Tf Helloworld ET\n" +
+        "endstream\n" +
+        "endobj\n" +
+        "xref\n" +
+        "0 5\n" +
+        "0000000000 65535 f \n" +
+        "0000000009 00000 n \n" +
+        "0000000052 00000 n \n" +
+        "0000000101 00000 n \n" +
+        "0000000201 00000 n \n" +
+        "trailer <</Size 5/Root 1 0 R>>\n" +
+        "startxref\n" +
+        "272\n" +
+        "%%EOF\n";
+      const pdfData = new TextEncoder().encode(pdfString);
+      FileMeta.save(pdfMeta);
+      await FileStore.save({ id: pdfId, data: pdfData });
+
+      console.log("Mock files successfully seeded.");
+    } catch (e) {
+      console.warn("Failed to seed mock files:", e);
+    }
+  }
+
   let bootstrapped = false;
 
   async function bootstrap() {
     if (bootstrapped) return;
     bootstrapped = true;
+
+    await seedMockFilesIfEmpty();
 
     initTheme();
     initNav();
