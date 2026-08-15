@@ -174,6 +174,74 @@ const FileMeta = {
   clear() { LS.set('files_meta', []); }
 };
 
+/* ── Courses & Learning Tracker metadata ─────────────── */
+const CourseStore = {
+  getAll() { return LS.get('courses', []); },
+  getById(id) { return this.getAll().find(c => c.id === id) || null; },
+  save(course) {
+    const all = this.getAll().filter(c => c.id !== course.id);
+    all.push(course);
+    LS.set('courses', all);
+  },
+  delete(id) {
+    LS.set('courses', this.getAll().filter(c => c.id !== id));
+    LearningLogStore.deleteForCourse(id);
+  },
+  updatePosition(id, position, furthest = null) {
+    const all = this.getAll();
+    const c = all.find(item => item.id === id);
+    if (c) {
+      c.playbackPosition = position;
+      if (furthest !== null) {
+        c.furthestPosition = Math.max(c.furthestPosition || 0, furthest);
+      } else {
+        c.furthestPosition = Math.max(c.furthestPosition || 0, position);
+      }
+      c.lastWatchedAt = new Date().toISOString();
+      LS.set('courses', all);
+    }
+  }
+};
+
+/* ── Daily Learning Activity Logs ───────────────────── */
+const LearningLogStore = {
+  getAll() { return LS.get('learning_logs', []); },
+  getForToday() {
+    const today = new Date().toISOString().slice(0, 10);
+    return this.getAll().filter(l => l.date === today);
+  },
+  getTodaySecondsForCourse(courseId) {
+    const today = new Date().toISOString().slice(0, 10);
+    const entry = this.getAll().find(l => l.date === today && l.courseId === courseId);
+    return entry ? entry.secondsWatched || 0 : 0;
+  },
+  getTodayTotalSeconds() {
+    return this.getForToday().reduce((sum, l) => sum + (l.secondsWatched || 0), 0);
+  },
+  addWatchSeconds(courseId, seconds) {
+    if (!seconds || seconds <= 0) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const all = this.getAll();
+    let entry = all.find(l => l.date === today && l.courseId === courseId);
+    if (entry) {
+      entry.secondsWatched = (entry.secondsWatched || 0) + seconds;
+      entry.lastUpdated = new Date().toISOString();
+    } else {
+      entry = {
+        date: today,
+        courseId,
+        secondsWatched: seconds,
+        lastUpdated: new Date().toISOString()
+      };
+      all.push(entry);
+    }
+    LS.set('learning_logs', all);
+  },
+  deleteForCourse(courseId) {
+    LS.set('learning_logs', this.getAll().filter(l => l.courseId !== courseId));
+  }
+};
+
 /* ── Data export/import ─────────────────────────────── */
 const DataPortability = {
   async export() {
@@ -193,7 +261,9 @@ const DataPortability = {
         shared_spaces: LS.get('shared_spaces', []),
         friends: LS.get('friends', []),
         friend_requests: LS.get('friend_requests', []),
-        workspace_tabs: LS.get('workspace_tabs', null)
+        workspace_tabs: LS.get('workspace_tabs', null),
+        courses: LS.get('courses', []),
+        learning_logs: LS.get('learning_logs', [])
       },
       filesMeta: FileMeta.getAll(),
       notes: notes.map(n => ({ ...n, id: n.localId }))
@@ -219,6 +289,8 @@ const DataPortability = {
     if (s.friends) LS.set('friends', s.friends);
     if (s.friend_requests) LS.set('friend_requests', s.friend_requests);
     if (s.workspace_tabs) LS.set('workspace_tabs', s.workspace_tabs);
+    if (s.courses) LS.set('courses', s.courses);
+    if (s.learning_logs) LS.set('learning_logs', s.learning_logs);
     if (data.filesMeta) LS.set('files_meta', data.filesMeta);
     if (data.notes) {
       for (const note of data.notes) {
@@ -466,7 +538,9 @@ const CloudSync = {
           shared_spaces: LS.get('shared_spaces', []),
           friends: LS.get('friends', []),
           friend_requests: LS.get('friend_requests', []),
-          workspace_tabs: LS.get('workspace_tabs', null)
+          workspace_tabs: LS.get('workspace_tabs', null),
+          courses: LS.get('courses', []),
+          learning_logs: LS.get('learning_logs', [])
         },
         filesMeta: FileMeta.getAll(),
         notes: notes.map(n => ({ ...n, id: n.localId }))
@@ -532,6 +606,8 @@ const CloudSync = {
         if (s.friends) localStorage.setItem(`examos_${user.id}_friends`, JSON.stringify(s.friends));
         if (s.friend_requests) localStorage.setItem(`examos_${user.id}_friend_requests`, JSON.stringify(s.friend_requests));
         if (s.workspace_tabs) localStorage.setItem(`examos_${user.id}_workspace_tabs`, JSON.stringify(s.workspace_tabs));
+        if (s.courses) localStorage.setItem(`examos_${user.id}_courses`, JSON.stringify(s.courses));
+        if (s.learning_logs) localStorage.setItem(`examos_${user.id}_learning_logs`, JSON.stringify(s.learning_logs));
         if (payload.filesMeta) localStorage.setItem(`examos_${user.id}_files_meta`, JSON.stringify(payload.filesMeta));
 
         if (payload.notes && payload.notes.length) {

@@ -16,6 +16,8 @@
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
   <!-- JSZip (for PPTX viewer) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
 </head>
 <body>
 
@@ -166,6 +168,11 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         <span class="nav-label">Schedule</span>
         <span class="nav-tooltip">Schedule</span>
+      </a>
+      <a class="nav-link" data-view="learning">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
+        <span class="nav-label">Learning</span>
+        <span class="nav-tooltip">Learning</span>
       </a>
       <div class="nav-section-label" style="margin-top:8px;">Collaboration</div>
       <a class="nav-link" data-view="shared">
@@ -850,6 +857,220 @@
         </div>
       </section>
 
+      <!-- ── LEARNING TRACKER ─────────────────────────────────── -->
+      <section id="view-learning" class="view hidden">
+        <!-- ── LEARNING OVERVIEW PANE ────────────────────────── -->
+        <div id="learning-overview-pane">
+          <div class="view-header">
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <h2 style="font-size:1.25rem;font-weight:800;color:var(--text);margin:0;">Learning Tracker</h2>
+              <p style="font-size:0.8rem;color:var(--text-3);margin:0;">Track YouTube courses with auto-generated checkpoints and progress</p>
+            </div>
+            <button class="btn-primary" id="learning-add-course-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              + Add Course
+            </button>
+          </div>
+
+          <!-- Quick Stats Banner -->
+          <div class="learning-stats-row">
+            <div class="stat-card">
+              <div class="stat-icon" style="background:rgba(79,70,229,0.1);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              </div>
+              <div>
+                <div class="stat-value" id="learning-stat-total-courses">0</div>
+                <div class="stat-label">Active Courses</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:rgba(14,165,233,0.1);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#0EA5E9" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div>
+                <div class="stat-value" id="learning-stat-total-hours">0m</div>
+                <div class="stat-label">Total Watched</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:rgba(16,185,129,0.1);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+              <div>
+                <div class="stat-value" id="learning-stat-today-time">0m</div>
+                <div class="stat-label">Watched Today</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="background:rgba(245,158,11,0.1);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              </div>
+              <div>
+                <div class="stat-value" id="learning-stat-streak">0</div>
+                <div class="stat-label">Day Streak 🔥</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Courses Grid -->
+          <div class="learning-courses-grid" id="learning-courses-grid">
+            <!-- Course cards rendered dynamically -->
+          </div>
+
+          <!-- Clean Empty State for New Users -->
+          <div class="empty-state hidden" id="learning-empty-state" style="padding:56px 20px; text-align:center;">
+            <span class="empty-icon" style="font-size:2.8rem;margin-bottom:8px;">🎓</span>
+            <h3>No courses yet</h3>
+            <p style="max-width:380px;margin:0 auto 16px;">Add your first course to start tracking your learning.</p>
+            <button class="btn-primary" id="learning-empty-add-course-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              + Add Course
+            </button>
+          </div>
+        </div>
+
+        <!-- ── LEARNING COURSE DETAIL PANE ────────────────────── -->
+        <div id="learning-detail-pane" class="hidden">
+          <div class="course-detail-topbar">
+            <button class="btn-ghost" id="learning-back-to-overview" style="font-size:0.82rem;padding:6px 12px;gap:6px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="15 18 9 12 15 6"/></svg>
+              All Courses
+            </button>
+            <div class="course-detail-header-info">
+              <h2 id="learning-detail-title" class="course-detail-heading">Course Title</h2>
+              <div class="course-detail-subline">
+                <span id="learning-detail-author" class="course-detail-author-badge">YouTube</span>
+                <span class="dot-separator">•</span>
+                <span id="learning-detail-duration" class="course-detail-dur-badge">00:00:00</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Course Dashboard Layout: Video Left/Top, Checkpoints & Stats Right/Bottom -->
+          <div class="learning-detail-layout">
+            
+            <!-- Video & Live Player Column -->
+            <div class="learning-player-column">
+              <div class="learning-video-wrapper">
+                <div id="learning-yt-container" class="learning-yt-frame-box">
+                  <!-- YouTube player rendered here -->
+                </div>
+              </div>
+
+              <!-- Player Controls & Fast Actions -->
+              <div class="learning-player-controlbar">
+                <div class="player-ctrl-left">
+                  <div class="player-live-pos-pill" title="Current Playback Position">
+                    <span class="player-live-dot"></span>
+                    <span id="learning-player-current-pos">00:00:00</span>
+                  </div>
+                  <button class="btn-icon" id="learning-seek-back" title="Rewind 10s">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    <span style="font-size:0.68rem;font-weight:700;margin-left:2px;">10s</span>
+                  </button>
+                  <button class="btn-icon" id="learning-seek-fwd" title="Forward 10s">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    <span style="font-size:0.68rem;font-weight:700;margin-left:2px;">10s</span>
+                  </button>
+                </div>
+
+                <div class="player-ctrl-right">
+                  <select id="learning-playback-rate" class="select-field" style="font-size:0.75rem;padding:4px 8px;min-width:70px;" title="Playback Speed">
+                    <option value="0.75">0.75x</option>
+                    <option value="1" selected>1.0x</option>
+                    <option value="1.25">1.25x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="1.75">1.75x</option>
+                    <option value="2">2.0x</option>
+                  </select>
+                  <button class="btn-ghost" id="learning-reset-pos-btn" style="font-size:0.72rem;padding:4px 8px;" title="Restart Course from beginning">
+                    ↺ Restart
+                  </button>
+                </div>
+              </div>
+
+              <!-- Overall Course Progress Card -->
+              <div class="learning-progress-card">
+                <div class="progress-card-top">
+                  <div class="progress-card-label">Course Progress</div>
+                  <div class="progress-card-pct" id="learning-player-progress-pct">0%</div>
+                </div>
+                <div class="course-progress-bar-wrap big">
+                  <div class="course-progress-bar-fill" id="learning-player-progressbar" style="width:0%;"></div>
+                </div>
+                <div class="progress-card-bottom">
+                  <span id="learning-player-time-ratio" style="color:var(--text-3);font-size:0.8rem;font-weight:500;">0m / 0m</span>
+                  <span style="color:var(--primary);font-size:0.78rem;font-weight:600;">Auto-syncing position</span>
+                </div>
+              </div>
+
+              <!-- Course Statistics Grid -->
+              <div class="learning-course-stats-card">
+                <h4 class="course-stats-title">COURSE PROGRESS STATISTICS</h4>
+                <div class="course-stats-grid">
+                  <div class="course-stat-item">
+                    <div class="cstat-label">Total watch time</div>
+                    <div class="cstat-val" id="course-stat-total-watched">0m</div>
+                  </div>
+                  <div class="course-stat-item">
+                    <div class="cstat-label">Today's watch time</div>
+                    <div class="cstat-val" id="course-stat-today-watched">0m</div>
+                  </div>
+                  <div class="course-stat-item">
+                    <div class="cstat-label">Days studied</div>
+                    <div class="cstat-val" id="course-stat-days">0 days</div>
+                  </div>
+                  <div class="course-stat-item">
+                    <div class="cstat-label">Current streak</div>
+                    <div class="cstat-val" id="course-stat-streak">0 🔥</div>
+                  </div>
+                  <div class="course-stat-item">
+                    <div class="cstat-label">Course completion</div>
+                    <div class="cstat-val" id="course-stat-percent">0%</div>
+                  </div>
+                  <div class="course-stat-item">
+                    <div class="cstat-label">Remaining duration</div>
+                    <div class="cstat-val" id="course-stat-remaining">0m</div>
+                  </div>
+                </div>
+                <div class="course-stat-active-cp">
+                  <span class="active-cp-lbl">Current Checkpoint:</span>
+                  <strong id="course-stat-current-cp" class="active-cp-name">Introduction</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- Checkpoints Column -->
+            <div class="learning-checkpoints-column">
+              <div class="checkpoints-card">
+                <div class="checkpoints-card-header">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <h3 style="font-size:0.92rem;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;margin:0;">AUTO-GENERATED CHECKPOINTS</h3>
+                    <span class="checkpoints-count-pill" id="learning-checkpoints-count">0</span>
+                  </div>
+                  <div style="font-size:0.75rem;color:var(--text-3);">Click any topic to jump</div>
+                </div>
+
+                <!-- Notice if no chapters found -->
+                <div id="learning-no-checkpoints-notice" class="hidden learning-no-cp-banner">
+                  <span style="font-size:1.2rem;">ℹ️</span>
+                  <div>
+                    <div style="font-weight:600;font-size:0.82rem;color:var(--text);">Automatic checkpoints unavailable</div>
+                    <div style="font-size:0.75rem;color:var(--text-3);margin-top:2px;" id="learning-no-cp-reason">Automatic topic checkpoints are unavailable for this video because chapter and transcript data could not be accessed. Your overall course progress and exact playback position are fully tracked automatically.</div>
+                  </div>
+                </div>
+
+                <!-- Checkpoints list -->
+                <div class="checkpoints-list" id="learning-checkpoints-list">
+                  <!-- Checkpoint items rendered dynamically -->
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
     </div><!-- /.view-container -->
   </div><!-- /.main-wrapper -->
 
@@ -878,6 +1099,10 @@
     <div class="bn-item" data-view="schedule">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Schedule
+    </div>
+    <div class="bn-item" data-view="learning">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
+      Learning
     </div>
     <div class="bn-item" data-view="shared">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
@@ -1181,6 +1406,51 @@
   </div>
 </div>
 
+<!-- ─── ADD COURSE MODAL ─────────────────────────────────── -->
+<div class="modal-overlay hidden" id="add-course-modal" style="align-items:center;justify-content:center;z-index:200;">
+  <div class="modal-card" style="max-width:440px;">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:1.2rem;">🎓</span>
+        <h3 style="margin:0;">Add YouTube Course</h3>
+      </div>
+      <button class="modal-close" id="add-course-modal-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="setting-label">YouTube Video / Course URL</label>
+        <div class="yt-input-wrap" style="margin-top:6px;">
+          <svg viewBox="0 0 24 24" fill="#FF4444" style="width:20px;height:20px;flex-shrink:0;"><path d="M22.54 6.42a2.78 2.78 0 00-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 00-1.95 1.96A29 29 0 001 12a29 29 0 00.46 5.58A2.78 2.78 0 003.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 001.95-1.96A29 29 0 0023 12a29 29 0 00-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg>
+          <input class="form-input" id="add-course-url-input" placeholder="Paste YouTube link (e.g. https://youtu.be/...)" style="border:none;background:none;padding:6px 8px;" />
+        </div>
+        <div id="add-course-status-text" style="font-size:0.75rem;margin-top:6px;min-height:18px;"></div>
+      </div>
+
+      <!-- Live Course Preview Box -->
+      <div id="add-course-preview-box" class="hidden" style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px;margin-bottom:12px;">
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <img id="add-course-preview-thumb" src="" alt="Thumbnail" style="width:100px;height:56px;object-fit:cover;border-radius:var(--r-sm);flex-shrink:0;border:1px solid var(--border);" />
+          <div style="flex-grow:1;min-width:0;">
+            <div id="add-course-preview-title" style="font-weight:700;font-size:0.85rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;">Course Title</div>
+            <div id="add-course-preview-author" style="font-size:0.75rem;color:var(--text-3);margin-top:2px;">Channel Name</div>
+          </div>
+        </div>
+        <div id="add-course-preview-cp-status" style="font-size:0.75rem;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);line-height:1.4;"></div>
+      </div>
+
+      <div style="font-size:0.73rem;color:var(--text-4);line-height:1.4;">
+        Exam OS will automatically detect topics, chapters, and timestamps from the video and remember your playback position when you return.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="add-course-cancel-btn">Cancel</button>
+      <button class="btn-primary" id="add-course-confirm-btn" disabled>Add Course</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─── TOASTS ────────────────────────────────────────────── -->
 <div id="toasts"></div>
 
@@ -1192,6 +1462,7 @@
 <script src="js/notes.js?v=4"></script>
 <script src="js/pomodoro.js?v=4"></script>
 <script src="js/timetable.js?v=4"></script>
+<script src="js/learning.js?v=4"></script>
 <script src="js/app.js?v=4"></script>
 </body>
 </html>

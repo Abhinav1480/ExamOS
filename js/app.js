@@ -4,8 +4,8 @@
    ═══════════════════════════════════════════════════════ */
 
 const App = (() => {
-  const VIEWS = ['dashboard', 'library', 'workspace', 'notes', 'focus', 'schedule', 'settings', 'shared'];
-  const TITLES = { dashboard:'Dashboard', library:'Library', workspace:'Workspace', notes:'Notes', focus:'Focus', schedule:'Schedule', settings:'Settings', shared:'Shared Spaces' };
+  const VIEWS = ['dashboard', 'library', 'workspace', 'notes', 'focus', 'schedule', 'learning', 'settings', 'shared'];
+  const TITLES = { dashboard:'Dashboard', library:'Library', workspace:'Workspace', notes:'Notes', focus:'Focus', schedule:'Schedule', learning:'Learning', settings:'Settings', shared:'Shared Spaces' };
   let currentView = 'dashboard';
   let libFilter = 'all';
   let libGrid = true;
@@ -17,6 +17,12 @@ const App = (() => {
   /* ── Navigate ────────────────────────────────────────── */
   function navigate(view) {
     if (!VIEWS.includes(view)) return;
+
+    // Pause video playback if navigating away from learning
+    if (currentView === 'learning' && view !== 'learning' && typeof Learning !== 'undefined') {
+      Learning.pause();
+    }
+
     VIEWS.forEach(v => {
       const el = document.getElementById(`view-${v}`);
       if (el) el.classList.toggle('hidden', v !== view);
@@ -42,6 +48,10 @@ const App = (() => {
     if (view === 'focus') Pomodoro.renderBars();
     if (view === 'shared') renderSharedView();
     if (view === 'workspace') Workspace.activate();
+    if (view === 'learning' && typeof Learning !== 'undefined') {
+      Learning.init();
+      Learning.refresh();
+    }
   }
 
   /* ── Sidebar State Manager ────────────────────────────── */
@@ -1793,6 +1803,7 @@ const App = (() => {
     Workspace.init();
     await Notes.init();
     Pomodoro.init();
+    if (typeof Learning !== 'undefined') Learning.init();
 
     refreshDashboard();
 
