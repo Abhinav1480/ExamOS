@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════ */
 
 const DB_NAME = 'ExamOS_v2';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 let db = null;
 
 function openDB() {
@@ -15,6 +15,8 @@ function openDB() {
       const d = e.target.result;
       if (!d.objectStoreNames.contains('files')) d.createObjectStore('files', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('notes')) d.createObjectStore('notes', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('courses')) d.createObjectStore('courses', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('learning_logs')) d.createObjectStore('learning_logs', { keyPath: 'id' });
     };
     req.onsuccess = e => { db = e.target.result; resolve(db); };
     req.onerror = e => reject(e.target.error);
@@ -174,20 +176,176 @@ const FileMeta = {
   clear() { LS.set('files_meta', []); }
 };
 
+/* ── Persistent Courses in IndexedDB ─────────────────── */
+const CourseDB = {
+  async save(course) {
+    if (!course || !course.id) return;
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('courses', 'readwrite');
+      tx.objectStore('courses').put({ ...course, id: `${uid()}_${course.id}`, localId: course.id, userId: uid() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  },
+  async saveAll(courses) {
+    if (!Array.isArray(courses) || !courses.length) return;
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('courses', 'readwrite');
+      const store = tx.objectStore('courses');
+      courses.forEach(c => {
+        if (c && c.id) store.put({ ...c, id: `${uid()}_${c.id}`, localId: c.id, userId: uid() });
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  },
+  async getAll() {
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('courses', 'readonly');
+      const req = tx.objectStore('courses').getAll();
+      req.onsuccess = () => {
+        const results = (req.result || [])
+          .filter(c => c.userId === uid())
+          .map(c => ({ ...c, id: c.localId || (typeof c.id === 'string' && c.id.startsWith(`${uid()}_`) ? c.id.slice(uid().length + 1) : c.id) }));
+        resolve(results);
+      };
+      req.onerror = e => reject(e.target.error);
+    });
+  },
+  async delete(courseId) {
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('courses', 'readwrite');
+      tx.objectStore('courses').delete(`${uid()}_${courseId}`);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  },
+  async clearUser() {
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('courses', 'readwrite');
+      const store = tx.objectStore('courses');
+      const req = store.openCursor();
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (!cursor) { resolve(); return; }
+        if (cursor.value.userId === uid()) cursor.delete();
+        cursor.continue();
+      };
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+};
+
+/* ── Persistent Learning Activity Logs in IndexedDB ─── */
+const LearningLogDB = {
+  async save(log) {
+    if (!log || !log.courseId) return;
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('learning_logs', 'readwrite');
+      const logId = `${uid()}_${log.date}_${log.courseId}`;
+      tx.objectStore('learning_logs').put({ ...log, id: logId, userId: uid() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  },
+  async saveAll(logs) {
+    if (!Array.isArray(logs) || !logs.length) return;
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('learning_logs', 'readwrite');
+      const store = tx.objectStore('learning_logs');
+      logs.forEach(l => {
+        if (l && l.courseId) {
+          const logId = `${uid()}_${l.date}_${l.courseId}`;
+          store.put({ ...l, id: logId, userId: uid() });
+        }
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  },
+  async getAll() {
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('learning_logs', 'readonly');
+      const req = tx.objectStore('learning_logs').getAll();
+      req.onsuccess = () => resolve((req.result || []).filter(l => l.userId === uid()));
+      req.onerror = e => reject(e.target.error);
+    });
+  },
+  async deleteForCourse(courseId) {
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('learning_logs', 'readwrite');
+      const store = tx.objectStore('learning_logs');
+      const req = store.openCursor();
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (!cursor) { resolve(); return; }
+        if (cursor.value.userId === uid() && cursor.value.courseId === courseId) cursor.delete();
+        cursor.continue();
+      };
+      req.onerror = e => reject(e.target.error);
+    });
+  },
+  async clearUser() {
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('learning_logs', 'readwrite');
+      const store = tx.objectStore('learning_logs');
+      const req = store.openCursor();
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (!cursor) { resolve(); return; }
+        if (cursor.value.userId === uid()) cursor.delete();
+        cursor.continue();
+      };
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+};
+
 /* ── Courses & Learning Tracker metadata ─────────────── */
 const CourseStore = {
-  getAll() { return LS.get('courses', []); },
+  getAll() {
+    const primary = LS.get('courses', null);
+    if (Array.isArray(primary) && primary.length > 0) return primary;
+    const backup = LS.get('courses_backup', null);
+    if (Array.isArray(backup) && backup.length > 0) {
+      try { localStorage.setItem(ukey('courses'), JSON.stringify(backup)); } catch (_) {}
+      return backup;
+    }
+    return Array.isArray(primary) ? primary : [];
+  },
   getById(id) { return this.getAll().find(c => c.id === id) || null; },
   save(course) {
+    if (!course || !course.id) return;
     const all = this.getAll().filter(c => c.id !== course.id);
     all.push(course);
     LS.set('courses', all);
+    try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(all)); } catch (_) {}
+    CourseDB.save(course).catch(console.warn);
+  },
+  saveAll(courses) {
+    if (!Array.isArray(courses)) return;
+    LS.set('courses', courses);
+    try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(courses)); } catch (_) {}
+    CourseDB.saveAll(courses).catch(console.warn);
   },
   delete(id) {
-    LS.set('courses', this.getAll().filter(c => c.id !== id));
+    const remaining = this.getAll().filter(c => c.id !== id);
+    LS.set('courses', remaining);
+    try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(remaining)); } catch (_) {}
+    CourseDB.delete(id).catch(console.warn);
     LearningLogStore.deleteForCourse(id);
   },
-  updatePosition(id, position, furthest = null) {
+  updatePosition(id, position, furthest = null, skipCloudSync = false) {
     const all = this.getAll();
     const c = all.find(item => item.id === id);
     if (c) {
@@ -198,7 +356,50 @@ const CourseStore = {
         c.furthestPosition = Math.max(c.furthestPosition || 0, position);
       }
       c.lastWatchedAt = new Date().toISOString();
-      LS.set('courses', all);
+      if (skipCloudSync) {
+        try {
+          localStorage.setItem(ukey('courses'), JSON.stringify(all));
+          localStorage.setItem(ukey('courses_backup'), JSON.stringify(all));
+        } catch (_) {}
+      } else {
+        LS.set('courses', all);
+        try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(all)); } catch (_) {}
+      }
+      CourseDB.save(c).catch(console.warn);
+    }
+  },
+  async init() {
+    try {
+      const dbCourses = await CourseDB.getAll();
+      const lsCourses = this.getAll();
+      
+      if (dbCourses && dbCourses.length > 0) {
+        const merged = [...lsCourses];
+        let changed = false;
+        dbCourses.forEach(dbc => {
+          const idx = merged.findIndex(c => c.id === dbc.id);
+          if (idx === -1) {
+            merged.push(dbc);
+            changed = true;
+          } else {
+            const local = merged[idx];
+            const localTime = new Date(local.lastWatchedAt || local.addedAt || 0).getTime();
+            const dbTime = new Date(dbc.lastWatchedAt || dbc.addedAt || 0).getTime();
+            if (dbTime > localTime || (dbc.playbackPosition || 0) > (local.playbackPosition || 0)) {
+              merged[idx] = { ...local, ...dbc };
+              changed = true;
+            }
+          }
+        });
+        if (changed || merged.length > lsCourses.length) {
+          LS.set('courses', merged);
+          try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(merged)); } catch (_) {}
+        }
+      } else if (lsCourses && lsCourses.length > 0) {
+        await CourseDB.saveAll(lsCourses);
+      }
+    } catch (e) {
+      console.warn("CourseStore.init error:", e);
     }
   }
 };
@@ -218,7 +419,7 @@ const LearningLogStore = {
   getTodayTotalSeconds() {
     return this.getForToday().reduce((sum, l) => sum + (l.secondsWatched || 0), 0);
   },
-  addWatchSeconds(courseId, seconds) {
+  addWatchSeconds(courseId, seconds, skipCloudSync = false) {
     if (!seconds || seconds <= 0) return;
     const today = new Date().toISOString().slice(0, 10);
     const all = this.getAll();
@@ -235,10 +436,84 @@ const LearningLogStore = {
       };
       all.push(entry);
     }
-    LS.set('learning_logs', all);
+    if (skipCloudSync) {
+      try { localStorage.setItem(ukey('learning_logs'), JSON.stringify(all)); } catch (_) {}
+    } else {
+      LS.set('learning_logs', all);
+    }
+    LearningLogDB.save(entry).catch(console.warn);
   },
   deleteForCourse(courseId) {
     LS.set('learning_logs', this.getAll().filter(l => l.courseId !== courseId));
+    LearningLogDB.deleteForCourse(courseId).catch(console.warn);
+  },
+  async init() {
+    try {
+      const dbLogs = await LearningLogDB.getAll();
+      const lsLogs = this.getAll();
+      if (dbLogs && dbLogs.length > 0) {
+        const merged = [...lsLogs];
+        let changed = false;
+        dbLogs.forEach(dbl => {
+          const idx = merged.findIndex(l => l.date === dbl.date && l.courseId === dbl.courseId);
+          if (idx === -1) {
+            merged.push(dbl);
+            changed = true;
+          } else {
+            if ((dbl.secondsWatched || 0) > (merged[idx].secondsWatched || 0)) {
+              merged[idx].secondsWatched = dbl.secondsWatched;
+              changed = true;
+            }
+          }
+        });
+        if (changed || merged.length > lsLogs.length) {
+          LS.set('learning_logs', merged);
+        }
+      } else if (lsLogs && lsLogs.length > 0) {
+        await LearningLogDB.saveAll(lsLogs);
+      }
+    } catch (e) {
+      console.warn("LearningLogStore.init error:", e);
+    }
+  }
+};
+
+/* ── Guest to User Data Migration ───────────────────── */
+const StorageMigrate = {
+  migrateGuestData(userId) {
+    if (!userId || userId === 'guest') return;
+    try {
+      const guestPrefix = 'examos_guest_';
+      const userPrefix = `examos_${userId}_`;
+      
+      const guestCourses = JSON.parse(localStorage.getItem(`${guestPrefix}courses`) || '[]');
+      if (guestCourses && guestCourses.length > 0) {
+        const userCourses = JSON.parse(localStorage.getItem(`${userPrefix}courses`) || '[]');
+        const merged = [...userCourses];
+        guestCourses.forEach(gc => {
+          if (!merged.some(c => c.id === gc.id)) merged.push(gc);
+        });
+        localStorage.setItem(`${userPrefix}courses`, JSON.stringify(merged));
+        localStorage.setItem(`${userPrefix}courses_backup`, JSON.stringify(merged));
+        localStorage.removeItem(`${guestPrefix}courses`);
+        localStorage.removeItem(`${guestPrefix}courses_backup`);
+      }
+
+      const guestLogs = JSON.parse(localStorage.getItem(`${guestPrefix}learning_logs`) || '[]');
+      if (guestLogs && guestLogs.length > 0) {
+        const userLogs = JSON.parse(localStorage.getItem(`${userPrefix}learning_logs`) || '[]');
+        const mergedLogs = [...userLogs];
+        guestLogs.forEach(gl => {
+          const idx = mergedLogs.findIndex(l => l.date === gl.date && l.courseId === gl.courseId);
+          if (idx === -1) mergedLogs.push(gl);
+          else mergedLogs[idx].secondsWatched = Math.max(mergedLogs[idx].secondsWatched || 0, gl.secondsWatched || 0);
+        });
+        localStorage.setItem(`${userPrefix}learning_logs`, JSON.stringify(mergedLogs));
+        localStorage.removeItem(`${guestPrefix}learning_logs`);
+      }
+    } catch (e) {
+      console.warn("Guest data migration error:", e);
+    }
   }
 };
 
@@ -292,6 +567,13 @@ const DataPortability = {
     if (s.courses) LS.set('courses', s.courses);
     if (s.learning_logs) LS.set('learning_logs', s.learning_logs);
     if (data.filesMeta) LS.set('files_meta', data.filesMeta);
+    if (s.courses && Array.isArray(s.courses)) {
+      CourseStore.saveAll(s.courses);
+    }
+    if (s.learning_logs && Array.isArray(s.learning_logs)) {
+      LS.set('learning_logs', s.learning_logs);
+      LearningLogDB.saveAll(s.learning_logs).catch(console.warn);
+    }
     if (data.notes) {
       for (const note of data.notes) {
         await NoteStore.save({ ...note, localId: note.id || note.localId });
@@ -303,6 +585,8 @@ const DataPortability = {
     LS.clearUser();
     await FileStore.clearUser();
     await NoteStore.clearUser();
+    await CourseDB.clearUser();
+    await LearningLogDB.clearUser();
   }
 };
 
@@ -539,8 +823,8 @@ const CloudSync = {
           friends: LS.get('friends', []),
           friend_requests: LS.get('friend_requests', []),
           workspace_tabs: LS.get('workspace_tabs', null),
-          courses: LS.get('courses', []),
-          learning_logs: LS.get('learning_logs', [])
+          courses: CourseStore.getAll(),
+          learning_logs: LearningLogStore.getAll()
         },
         filesMeta: FileMeta.getAll(),
         notes: notes.map(n => ({ ...n, id: n.localId }))
@@ -595,41 +879,105 @@ const CloudSync = {
       if (payload && payload.settings) {
         const s = payload.settings;
         
-        if (s.subjects) localStorage.setItem(`examos_${user.id}_subjects`, JSON.stringify(s.subjects));
-        if (s.timetable) localStorage.setItem(`examos_${user.id}_timetable`, JSON.stringify(s.timetable));
-        if (s.exams) localStorage.setItem(`examos_${user.id}_exams`, JSON.stringify(s.exams));
-        if (s.bookmarks) localStorage.setItem(`examos_${user.id}_bookmarks`, JSON.stringify(s.bookmarks));
+        // 1. Safe Non-Destructive Merge for Courses
+        const localCourses = CourseStore.getAll();
+        const cloudCourses = Array.isArray(s.courses) ? s.courses : [];
+        const mergedCourses = [...localCourses];
+        let coursesChanged = false;
+
+        cloudCourses.forEach(cloudCourse => {
+          if (!cloudCourse || !cloudCourse.id) return;
+          const idx = mergedCourses.findIndex(c => c.id === cloudCourse.id);
+          if (idx === -1) {
+            mergedCourses.push(cloudCourse);
+            coursesChanged = true;
+          } else {
+            const local = mergedCourses[idx];
+            const localTime = new Date(local.lastWatchedAt || local.addedAt || 0).getTime();
+            const cloudTime = new Date(cloudCourse.lastWatchedAt || cloudCourse.addedAt || 0).getTime();
+            if (cloudTime > localTime || (cloudCourse.playbackPosition || 0) > (local.playbackPosition || 0)) {
+              mergedCourses[idx] = { ...local, ...cloudCourse };
+              coursesChanged = true;
+            }
+          }
+        });
+        CourseStore.saveAll(mergedCourses);
+
+        // 2. Safe Merge for Learning Logs
+        const localLogs = LearningLogStore.getAll();
+        const cloudLogs = Array.isArray(s.learning_logs) ? s.learning_logs : [];
+        const mergedLogs = [...localLogs];
+
+        cloudLogs.forEach(cloudLog => {
+          if (!cloudLog || !cloudLog.courseId) return;
+          const idx = mergedLogs.findIndex(l => l.date === cloudLog.date && l.courseId === cloudLog.courseId);
+          if (idx === -1) {
+            mergedLogs.push(cloudLog);
+          } else {
+            mergedLogs[idx].secondsWatched = Math.max(mergedLogs[idx].secondsWatched || 0, cloudLog.secondsWatched || 0);
+          }
+        });
+        LS.set('learning_logs', mergedLogs);
+        LearningLogDB.saveAll(mergedLogs).catch(console.warn);
+
+        // 3. Safe Merge for Subjects
+        if (s.subjects && Array.isArray(s.subjects) && s.subjects.length > 0) {
+          const localSubjects = LS.get('subjects', []);
+          const mergedSubjects = [...localSubjects];
+          s.subjects.forEach(sub => {
+            if (!mergedSubjects.some(ls => ls.id === sub.id)) mergedSubjects.push(sub);
+          });
+          localStorage.setItem(`examos_${user.id}_subjects`, JSON.stringify(mergedSubjects));
+        }
+
+        if (s.timetable && Array.isArray(s.timetable) && s.timetable.length > 0) {
+          localStorage.setItem(`examos_${user.id}_timetable`, JSON.stringify(s.timetable));
+        }
+        if (s.exams && Array.isArray(s.exams) && s.exams.length > 0) {
+          localStorage.setItem(`examos_${user.id}_exams`, JSON.stringify(s.exams));
+        }
+        if (s.bookmarks && Array.isArray(s.bookmarks) && s.bookmarks.length > 0) {
+          localStorage.setItem(`examos_${user.id}_bookmarks`, JSON.stringify(s.bookmarks));
+        }
         if (s.dailyTarget) localStorage.setItem(`examos_${user.id}_daily_target`, JSON.stringify(s.dailyTarget));
-        if (s.studyLog) localStorage.setItem(`examos_${user.id}_study_log`, JSON.stringify(s.studyLog));
+        if (s.studyLog && Array.isArray(s.studyLog) && s.studyLog.length > 0) {
+          localStorage.setItem(`examos_${user.id}_study_log`, JSON.stringify(s.studyLog));
+        }
         if (s.theme) localStorage.setItem(`examos_${user.id}_theme`, JSON.stringify(s.theme));
-        if (s.shared_spaces) localStorage.setItem(`examos_${user.id}_shared_spaces`, JSON.stringify(s.shared_spaces));
-        if (s.friends) localStorage.setItem(`examos_${user.id}_friends`, JSON.stringify(s.friends));
-        if (s.friend_requests) localStorage.setItem(`examos_${user.id}_friend_requests`, JSON.stringify(s.friend_requests));
+        if (s.shared_spaces && Array.isArray(s.shared_spaces) && s.shared_spaces.length > 0) {
+          localStorage.setItem(`examos_${user.id}_shared_spaces`, JSON.stringify(s.shared_spaces));
+        }
+        if (s.friends && Array.isArray(s.friends) && s.friends.length > 0) {
+          localStorage.setItem(`examos_${user.id}_friends`, JSON.stringify(s.friends));
+        }
+        if (s.friend_requests && Array.isArray(s.friend_requests)) {
+          localStorage.setItem(`examos_${user.id}_friend_requests`, JSON.stringify(s.friend_requests));
+        }
         if (s.workspace_tabs) localStorage.setItem(`examos_${user.id}_workspace_tabs`, JSON.stringify(s.workspace_tabs));
-        if (s.courses) localStorage.setItem(`examos_${user.id}_courses`, JSON.stringify(s.courses));
-        if (s.learning_logs) localStorage.setItem(`examos_${user.id}_learning_logs`, JSON.stringify(s.learning_logs));
-        if (payload.filesMeta) localStorage.setItem(`examos_${user.id}_files_meta`, JSON.stringify(payload.filesMeta));
+
+        if (payload.filesMeta && Array.isArray(payload.filesMeta) && payload.filesMeta.length > 0) {
+          const localFiles = FileMeta.getAll();
+          const mergedFiles = [...localFiles];
+          payload.filesMeta.forEach(fm => {
+            if (!mergedFiles.some(f => f.id === fm.id)) mergedFiles.push(fm);
+          });
+          localStorage.setItem(`examos_${user.id}_files_meta`, JSON.stringify(mergedFiles));
+        }
 
         if (payload.notes && payload.notes.length) {
-          await NoteStore.clearUser();
           for (const note of payload.notes) {
-            await openDB();
-            await new Promise((resNote, rejNote) => {
-              const req = indexedDB.open(DB_NAME, DB_VERSION);
-              req.onsuccess = e => {
-                const d = e.target.result;
-                const tx = d.transaction('notes', 'readwrite');
-                tx.objectStore('notes').put({ ...note, id: `${user.id}_${note.id || note.localId}`, userId: user.id, localId: note.id || note.localId });
-                tx.oncomplete = () => resNote();
-                tx.onerror = err => rejNote(err.target.error);
-              };
-            });
+            await NoteStore.save({ ...note, localId: note.id || note.localId });
           }
         }
 
         localStorage.setItem(`examos_${user.id}_last_sync`, wrapper.syncedAt || new Date().toISOString());
         this.updateSyncUI('synced');
-        console.log("Workspace data pulled and restored successfully from the cloud!");
+        console.log("Workspace data pulled and safely merged from the cloud!");
+
+        // If local had courses that cloud didn't have, push the merged state back to cloud
+        if (localCourses.length > cloudCourses.length) {
+          this.push().catch(console.warn);
+        }
       }
     } catch (e) {
       console.warn("Could not pull data from cloud:", e);
@@ -639,11 +987,30 @@ const CloudSync = {
 };
 
 let syncTimeout = null;
-function triggerCloudSync() {
-  if (syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = setTimeout(() => {
-    if (typeof CloudSync !== 'undefined') {
-      CloudSync.push().catch(console.error);
-    }
-  }, 3000);
+let lastSyncPushTime = 0;
+const SYNC_THROTTLE_MS = 15000;
+
+function triggerCloudSync(immediate = false) {
+  if (immediate) {
+    if (syncTimeout) { clearTimeout(syncTimeout); syncTimeout = null; }
+    if (typeof CloudSync !== 'undefined') CloudSync.push().catch(console.error);
+    lastSyncPushTime = Date.now();
+    return;
+  }
+  
+  const now = Date.now();
+  if (now - lastSyncPushTime > SYNC_THROTTLE_MS) {
+    if (syncTimeout) clearTimeout(syncTimeout);
+    syncTimeout = setTimeout(() => {
+      lastSyncPushTime = Date.now();
+      if (typeof CloudSync !== 'undefined') CloudSync.push().catch(console.error);
+    }, 1200);
+  } else {
+    if (syncTimeout) clearTimeout(syncTimeout);
+    syncTimeout = setTimeout(() => {
+      lastSyncPushTime = Date.now();
+      if (typeof CloudSync !== 'undefined') CloudSync.push().catch(console.error);
+    }, 3000);
+  }
 }
+

@@ -1803,6 +1803,8 @@ const App = (() => {
     Workspace.init();
     await Notes.init();
     Pomodoro.init();
+    if (typeof CourseStore !== 'undefined' && CourseStore.init) await CourseStore.init();
+    if (typeof LearningLogStore !== 'undefined' && LearningLogStore.init) await LearningLogStore.init();
     if (typeof Learning !== 'undefined') Learning.init();
 
     refreshDashboard();
@@ -1824,6 +1826,9 @@ const App = (() => {
           refreshDashboard();
           renderLibrary();
           if (typeof Notes !== 'undefined' && Notes.load) Notes.load().catch(console.error);
+          if (typeof Learning !== 'undefined' && App.getCurrentView() === 'learning') {
+            Learning.refresh();
+          }
         }).catch(console.error);
       }
     }
@@ -1851,6 +1856,19 @@ const App = (() => {
     getCurrentSpaceId: () => currentSpaceId
   };
 })();
+
+/* ── Unload & Visibility flush listeners ────────────── */
+window.addEventListener('beforeunload', () => {
+  if (typeof Learning !== 'undefined' && Learning.pause) Learning.pause();
+  if (typeof triggerCloudSync === 'function') triggerCloudSync(true);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    if (typeof Learning !== 'undefined' && Learning.pause) Learning.pause();
+    if (typeof triggerCloudSync === 'function') triggerCloudSync(true);
+  }
+});
 
 /* ── Subject select refresh ─────────────────────────── */
 function refreshSubjectSelects() {

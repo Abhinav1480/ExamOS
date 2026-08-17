@@ -756,9 +756,12 @@ const Learning = (() => {
     }
   }
 
+  let playbackTickCount = 0;
+
   function startPlaybackTracker() {
     if (trackerInterval) clearInterval(trackerInterval);
     lastLoggedSecond = Date.now();
+    playbackTickCount = 0;
 
     trackerInterval = setInterval(() => {
       if (!ytPlayer || !ytPlayerReady || !activeCourseId) return;
@@ -785,9 +788,17 @@ const Learning = (() => {
           updateCourseDetailHeader(course);
         }
 
-        CourseStore.save(course);
-        LearningLogStore.addWatchSeconds(course.id, 1);
+        // Save position locally and to IndexedDB with skipCloudSync=true for 1s ticks
+        CourseStore.updatePosition(course.id, curTime, course.furthestPosition, true);
+        LearningLogStore.addWatchSeconds(course.id, 1, true);
         updatePlaybackProgressUI(course, curTime);
+
+        // Periodically trigger cloud sync every 20 seconds during continuous playback
+        playbackTickCount++;
+        if (playbackTickCount >= 20) {
+          playbackTickCount = 0;
+          triggerCloudSync();
+        }
 
       } catch (err) {
         console.warn('Playback tracker error:', err);
@@ -811,6 +822,7 @@ const Learning = (() => {
       course.lastWatchedAt = new Date().toISOString();
       CourseStore.save(course);
       updatePlaybackProgressUI(course, curTime);
+      triggerCloudSync(true);
     } catch (e) {
       console.warn('saveCurrentPosition error:', e);
     }
@@ -827,6 +839,7 @@ const Learning = (() => {
           course.playbackPosition = seconds;
           CourseStore.save(course);
           updatePlaybackProgressUI(course, seconds);
+          triggerCloudSync();
         }
       }
     } catch (e) { console.warn('seekToTimestamp error:', e); }
@@ -1217,6 +1230,7 @@ const Learning = (() => {
     };
 
     CourseStore.save(newCourse);
+    triggerCloudSync(true);
     closeAddCourseModal();
     showToast(`Course "${newCourse.title}" added!`, 'success');
     openCourse(newCourse.id);
@@ -1228,12 +1242,25 @@ const Learning = (() => {
     if (!confirm(`Delete "${course.title}" from your Learning courses?`)) return;
     CourseStore.delete(courseId);
     LearningLogStore.deleteForCourse && LearningLogStore.deleteForCourse(courseId);
+    triggerCloudSync(true);
     showToast('Course deleted', 'info');
     renderOverview();
   }
 
   /* ── Event Bindings & Init ───────────────────────────── */
   function init() {
+    // Rehydrate courses & logs from IndexedDB
+    if (typeof CourseStore !== 'undefined' && CourseStore.init) {
+      CourseStore.init().then(() => {
+        if (typeof App !== 'undefined' && App.getCurrentView && App.getCurrentView() === 'learning') {
+          refresh();
+        }
+      }).catch(console.warn);
+    }
+    if (typeof LearningLogStore !== 'undefined' && LearningLogStore.init) {
+      LearningLogStore.init().catch(console.warn);
+    }
+
     ['learning-add-course-btn', 'learning-empty-add-course-btn'].forEach(id => {
       const btn = document.getElementById(id);
       if (btn) btn.onclick = openAddCourseModal;

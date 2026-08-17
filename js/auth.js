@@ -117,12 +117,12 @@ const Auth = (() => {
   /* ── Session ────────────────────────────────────────── */
   function getSession() {
     try {
-      const s = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(REMEMBER_KEY);
+      const s = localStorage.getItem(REMEMBER_KEY) || sessionStorage.getItem(SESSION_KEY);
       return s ? JSON.parse(s) : null;
     } catch { return null; }
   }
 
-  function saveSession(user, remember = false) {
+  function saveSession(user, remember = true) {
     const session = { id: user.id, name: user.name, email: user.email };
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
     if (remember) localStorage.setItem(REMEMBER_KEY, JSON.stringify(session));
@@ -328,7 +328,8 @@ const Auth = (() => {
   async function handleLogin() {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
-    const remember = document.getElementById('remember-me').checked;
+    const rememberEl = document.getElementById('remember-me');
+    const remember = rememberEl ? rememberEl.checked : true;
     const btn = document.getElementById('login-btn');
 
     setBtnLoading(btn, true, 'Signing in…');
@@ -336,6 +337,10 @@ const Auth = (() => {
       const user = await login(email, password);
       saveSession(user, remember);
       
+      if (typeof StorageMigrate !== 'undefined') {
+        StorageMigrate.migrateGuestData(user.id);
+      }
+
       if (typeof CloudSync !== 'undefined') {
         setBtnLoading(btn, true, 'Syncing your workspace…');
         await CloudSync.pull(user);
@@ -363,7 +368,12 @@ const Auth = (() => {
     setBtnLoading(btn, true, 'Creating account…');
     try {
       const user = await signup(name, email, password);
-      saveSession(user, false);
+      saveSession(user, true);
+
+      if (typeof StorageMigrate !== 'undefined') {
+        StorageMigrate.migrateGuestData(user.id);
+      }
+
       showApp(user);
     } catch (err) {
       showError('signup-error', err.message);
@@ -389,6 +399,10 @@ const Auth = (() => {
   }
 
   function showApp(user) {
+    if (typeof StorageMigrate !== 'undefined' && user && user.id) {
+      StorageMigrate.migrateGuestData(user.id);
+    }
+
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
 
