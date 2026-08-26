@@ -1206,5 +1206,13 @@ const Viewer = (() => {
     bindEvents();
   }
 
-  return { init, open, close, extractPDFText, renderInto };
+  return { 
+    init, 
+    open, 
+    close, 
+    extractPDFText, 
+    renderInto,
+    getCurrentFileId: () => currentFileId,
+    isOpen: () => !el('viewer-modal')?.classList.contains('hidden')
+  };
 })();

@@ -77,18 +77,25 @@ const Timetable = (() => {
     });
   }
 
-  function removeSchedule(id) {
-    if (!confirm('Remove this session?')) return;
-    schedules = schedules.filter(s => s.id !== id);
-    LS.set('timetable', schedules);
-    renderTimetable();
-    showToast('Session removed', 'info');
+  async function removeSchedule(id) {
+    if (!(await uiConfirm({ title: 'Remove this session?', message: 'It will be removed from your weekly timetable.', confirmText: 'Remove', danger: true }))) return;
+    try {
+      schedules = (LS.get('timetable', []) || []).filter(s => s.id !== id);
+      LS.set('timetable', schedules);
+      renderTimetable();
+      showToast('Session removed', 'info');
+    } catch (err) {
+      console.error('Failed to remove schedule session:', err);
+      showToast('Failed to remove session: ' + err.message, 'error');
+    }
   }
 
   /* ── Exam calendar ────────────────────────────────────── */
   function renderExams() {
     const grid = el('exam-grid');
     if (!grid) return;
+
+    exams = LS.get('exams', []);
 
     if (!exams.length) {
       grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="empty-icon">📅</span><h3>No exams scheduled</h3><p>Add exam dates to track your preparation</p></div>`;
@@ -109,16 +116,29 @@ const Timetable = (() => {
           <div class="exam-name">${escapeHtml(exam.title)}</div>
           <div class="exam-subject">${subj ? `${subj.icon} ${escapeHtml(subj.name)}` : 'No subject'}</div>
           <div class="countdown-badge">⏰ ${countdown}</div>
-          <button class="btn-ghost" data-id="${exam.id}" style="font-size:0.72rem;padding:4px 10px;margin-top:8px;" onclick="Timetable.removeExam(this.dataset.id)">Remove</button>
+          <button class="btn-ghost remove-exam-btn" data-id="${exam.id}" style="font-size:0.72rem;padding:4px 10px;margin-top:8px;">Remove</button>
         </div>`;
     }).join('');
+
+    grid.querySelectorAll('.remove-exam-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        removeExam(btn.dataset.id);
+      });
+    });
   }
 
-  function removeExam(id) {
-    exams = exams.filter(e => e.id !== id);
-    LS.set('exams', exams);
-    renderExams();
-    showToast('Exam removed', 'info');
+  async function removeExam(id) {
+    if (!(await uiConfirm({ title: 'Remove this exam?', message: 'It will be removed from your exam schedule.', confirmText: 'Remove', danger: true }))) return;
+    try {
+      exams = (LS.get('exams', []) || []).filter(e => e.id !== id);
+      LS.set('exams', exams);
+      renderExams();
+      showToast('Exam removed', 'info');
+    } catch (err) {
+      console.error('Failed to remove exam:', err);
+      showToast('Failed to remove exam: ' + err.message, 'error');
+    }
   }
 
   /* ── Targets ─────────────────────────────────────────── */

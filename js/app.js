@@ -285,13 +285,28 @@ const App = (() => {
     renderLibraryWithFiles(allFiles);
   }
 
-  function deleteSubject(id) {
-    if (!confirm('Delete this subject? Files will remain in your library.')) return;
-    const subjects = LS.get('subjects', []).filter(s => s.id !== id);
-    LS.set('subjects', subjects);
-    renderSubjects();
-    refreshSubjectSelects();
-    showToast('Subject deleted', 'info');
+  async function deleteSubject(id) {
+    const subj = SubjectStore.getById(id);
+    const subjName = subj ? subj.name : 'this subject';
+    const count = FileMeta.getAll().filter(f => f.subjectId === id && !f.spaceId).length;
+    const msg = count > 0 
+      ? `"${escapeHtml(subjName)}" and all ${count} file${count > 1 ? 's' : ''} in it will be permanently deleted from storage.`
+      : `"${escapeHtml(subjName)}" will be permanently removed from your library.`;
+    
+    if (!(await uiConfirm({ title: 'Delete subject?', message: msg, confirmText: 'Delete', danger: true }))) return;
+
+    try {
+      await SubjectStore.delete(id, true);
+      renderSubjects();
+      refreshSubjectSelects();
+      updateBadge();
+      updateStats();
+      if (currentView === 'library') renderLibrary();
+      showToast('Subject deleted', 'info');
+    } catch (err) {
+      console.error('Failed to delete subject:', err);
+      showToast('Failed to delete subject: ' + err.message, 'error');
+    }
   }
 
   /* ── Recent files ────────────────────────────────────── */
@@ -565,48 +580,56 @@ const App = (() => {
   }
 
   /* Subject actions */
-  function renameSubject(id) {
-    const subjects = LS.get('subjects', []);
-    const subj = subjects.find(s => s.id === id);
+  async function renameSubject(id) {
+    const subj = SubjectStore.getById(id);
     if (!subj) return;
-    const newName = prompt("Rename Subject:", subj.name);
+    const newName = await uiPrompt({ title: 'Rename subject', label: 'Subject name', value: subj.name, placeholder: 'Enter subject name', confirmText: 'Rename' });
     if (newName && newName.trim()) {
-      subj.name = newName.trim();
-      LS.set('subjects', subjects);
+      SubjectStore.rename(id, newName.trim());
       showToast("Subject renamed", "success");
       renderLibrary();
+      renderSubjects();
       refreshSubjectSelects();
     }
   }
 
   function toggleSubjectFavorite(id) {
-    const subjects = LS.get('subjects', []);
-    const subj = subjects.find(s => s.id === id);
-    if (!subj) return;
-    subj.favorite = !subj.favorite;
-    LS.set('subjects', subjects);
-    showToast(subj.favorite ? "⭐ Added to Favorites" : "Removed from Favorites", "info");
+    const isFav = SubjectStore.toggleFavorite(id);
+    showToast(isFav ? "⭐ Added to Favorites" : "Removed from Favorites", "info");
     renderLibrary();
+    renderSubjects();
   }
 
   function toggleSubjectPin(id) {
-    const subjects = LS.get('subjects', []);
-    const subj = subjects.find(s => s.id === id);
-    if (!subj) return;
-    subj.pinned = !subj.pinned;
-    LS.set('subjects', subjects);
-    showToast(subj.pinned ? "📌 Pinned Subject" : "Unpinned Subject", "info");
+    const isPinned = SubjectStore.togglePin(id);
+    showToast(isPinned ? "📌 Pinned Subject" : "Unpinned Subject", "info");
     renderLibrary();
+    renderSubjects();
   }
 
-  function deleteSubjectInLib(id) {
-    if (!confirm('Delete this subject? Files will remain in your library.')) return;
-    const subjects = LS.get('subjects', []).filter(s => s.id !== id);
-    LS.set('subjects', subjects);
-    currentSubjectId = null;
-    showToast('Subject deleted', 'info');
-    renderLibrary();
-    refreshSubjectSelects();
+  async function deleteSubjectInLib(id) {
+    const subj = SubjectStore.getById(id);
+    const subjName = subj ? subj.name : 'this subject';
+    const count = FileMeta.getAll().filter(f => f.subjectId === id && !f.spaceId).length;
+    const msg = count > 0 
+      ? `"${escapeHtml(subjName)}" and all ${count} file${count > 1 ? 's' : ''} in it will be permanently deleted from storage.`
+      : `"${escapeHtml(subjName)}" will be permanently removed from your library.`;
+
+    if (!(await uiConfirm({ title: 'Delete subject?', message: msg, confirmText: 'Delete permanently', danger: true }))) return;
+
+    try {
+      await SubjectStore.delete(id, true);
+      currentSubjectId = null;
+      renderLibrary();
+      renderSubjects();
+      refreshSubjectSelects();
+      updateBadge();
+      updateStats();
+      showToast('Subject deleted', 'info');
+    } catch (err) {
+      console.error('Failed to delete subject:', err);
+      showToast('Failed to delete subject: ' + err.message, 'error');
+    }
   }
 
   function renderLibraryWithFiles(files, isSubDir = false) {
@@ -710,14 +733,18 @@ const App = (() => {
 
   async function deleteFile(fileId) {
     const meta = FileMeta.getById(fileId);
-    if (!meta || !confirm(`Delete "${meta.name}"?`)) return;
-    await FileStore.delete(fileId);
-    FileMeta.delete(fileId);
-    showToast(`"${meta.name}" deleted`, 'info');
-    updateBadge();
-    if (currentView === 'library') renderLibrary();
-    else renderRecentFiles();
-    updateStats();
+    if (!meta || !(await uiConfirm({ title: 'Delete file?', message: `"${escapeHtml(meta.name)}" will be permanently removed from storage.`, confirmText: 'Delete', danger: true }))) return;
+    try {
+      await FileManager.deleteFile(fileId);
+      showToast(`"${meta.name}" deleted`, 'info');
+      updateBadge();
+      if (currentView === 'library') renderLibrary();
+      else if (currentView === 'dashboard') renderRecentFiles();
+      updateStats();
+    } catch (err) {
+      console.error('Failed to delete file:', err);
+      showToast('Failed to delete file: ' + err.message, 'error');
+    }
   }
 
   /* ── Upload ──────────────────────────────────────────── */
@@ -893,11 +920,12 @@ const App = (() => {
     document.getElementById('subject-create-btn').addEventListener('click', () => {
       const name = document.getElementById('subject-name').value.trim();
       if (!name) { showToast('Enter a subject name', 'warning'); return; }
-      const subjects = LS.get('subjects', []);
-      subjects.push({ id: Date.now().toString(), name, color: subjectColor, icon: subjectIcon });
-      LS.set('subjects', subjects);
+      const newSubject = { id: Date.now().toString(), name, color: subjectColor, icon: subjectIcon };
+      SubjectStore.save(newSubject);
       overlay.classList.add('hidden');
-      renderSubjects(); refreshSubjectSelects();
+      renderSubjects();
+      refreshSubjectSelects();
+      if (currentView === 'library') renderLibrary();
       showToast(`Subject "${name}" created!`, 'success');
     });
   }
@@ -957,8 +985,8 @@ const App = (() => {
     });
 
     document.getElementById('clear-all-btn').addEventListener('click', async () => {
-      if (!confirm('Permanently delete ALL your data? This cannot be undone.')) return;
-      if (!confirm('Are you absolutely sure?')) return;
+      if (!(await uiConfirm({ title: 'Delete ALL your data?', message: 'Subjects, files, notes, courses and settings will be permanently erased. This cannot be undone.', confirmText: 'Delete everything', danger: true }))) return;
+      if (!(await uiConfirm({ title: 'Are you absolutely sure?', message: 'This is your final warning — all data will be gone forever.', confirmText: 'Yes, delete it all', cancelText: 'Keep my data', danger: true, icon: '🚨' }))) return;
       await DataPortability.clearAll();
       showToast('All data deleted.', 'info');
       setTimeout(() => location.reload(), 800);
@@ -967,7 +995,9 @@ const App = (() => {
     // Logout buttons
     ['logout-btn', 'logout-settings-btn'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.addEventListener('click', () => { if (confirm('Sign out?')) Auth.logout(); });
+      if (el) el.addEventListener('click', async () => {
+        if (await uiConfirm({ title: 'Sign out?', message: 'Your data is saved locally and in the cloud.', confirmText: 'Sign out', icon: '👋' })) Auth.logout();
+      });
     });
   }
 
@@ -1182,10 +1212,10 @@ const App = (() => {
           </div>`).join('');
           
         friendsList.querySelectorAll('.remove-friend-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const email = btn.dataset.email;
             const friend = friends.find(f => f.email === email);
-            if (friend && confirm(`Remove ${friend.name} from friends?`)) {
+            if (friend && await uiConfirm({ title: 'Remove friend?', message: `Remove <b>${escapeHtml(friend.name)}</b> from your friends?`, confirmText: 'Remove', danger: true })) {
               FriendMeta.delete(email);
               showToast(`${friend.name} removed.`, 'info');
               renderFriendsTab();
@@ -1271,14 +1301,28 @@ const App = (() => {
         });
 
         folderGrid.querySelectorAll('.del-shared-folder').forEach(btn => {
-          btn.addEventListener('click', e => {
+          btn.addEventListener('click', async e => {
             e.stopPropagation();
-            if (confirm('Delete this folder? Files will remain in the workspace.')) {
-              const allSubj = LS.get('subjects', []).filter(s => s.id !== btn.dataset.id);
-              LS.set('subjects', allSubj);
-              if (currentSharedSubjectId === btn.dataset.id) currentSharedSubjectId = null;
-              showToast('Folder deleted.', 'info');
-              renderSpaceDetail();
+            const folderId = btn.dataset.id;
+            const count = FileMeta.getAll().filter(f => f.subjectId === folderId && f.spaceId === currentSpaceId).length;
+            const msg = count > 0 
+              ? `Delete this folder and its ${count} file${count > 1 ? 's' : ''} permanently from the shared space?` 
+              : 'Delete this folder from the shared space?';
+            if (await uiConfirm({ title: 'Delete folder?', message: msg, confirmText: 'Delete', danger: true })) {
+              try {
+                const spaceFiles = FileMeta.getAll().filter(f => f.subjectId === folderId && f.spaceId === currentSpaceId);
+                if (spaceFiles.length > 0) {
+                  await FileManager.deleteFiles(spaceFiles.map(f => f.id));
+                }
+                const allSubj = (LS.get('subjects', []) || []).filter(s => s.id !== folderId);
+                LS.set('subjects', allSubj);
+                if (currentSharedSubjectId === folderId) currentSharedSubjectId = null;
+                showToast('Folder deleted.', 'info');
+                renderSpaceDetail();
+              } catch (err) {
+                console.error('Failed to delete shared folder:', err);
+                showToast('Failed to delete folder: ' + err.message, 'error');
+              }
             }
           });
         });
@@ -1341,15 +1385,18 @@ const App = (() => {
         });
         
         filesGrid.querySelectorAll('.lib-del-btn').forEach(btn => {
-          btn.addEventListener('click', e => {
+          btn.addEventListener('click', async e => {
             e.stopPropagation();
             const meta = FileMeta.getById(btn.dataset.id);
-            if (meta && confirm(`Delete "${meta.name}" from this shared workspace?`)) {
-              FileStore.delete(btn.dataset.id).then(() => {
-                FileMeta.delete(btn.dataset.id);
+            if (meta && await uiConfirm({ title: 'Delete file?', message: `Delete <b>"${escapeHtml(meta.name)}"</b> permanently from this shared workspace?`, confirmText: 'Delete', danger: true })) {
+              try {
+                await FileManager.deleteFile(btn.dataset.id);
                 showToast(`"${meta.name}" deleted from workspace`, 'info');
                 renderSpaceDetail();
-              });
+              } catch (err) {
+                console.error('Failed to delete shared file:', err);
+                showToast('Failed to delete file: ' + err.message, 'error');
+              }
             }
           });
         });
@@ -1491,7 +1538,7 @@ const App = (() => {
 
     document.getElementById('friend-send-request-btn').onclick = handleSendFriendRequest;
 
-    document.getElementById('shared-space-invite-btn').onclick = () => {
+    document.getElementById('shared-space-invite-btn').onclick = async () => {
       const space = SharedMeta.getById(currentSpaceId);
       if (!space) return;
       const friends = FriendMeta.getAll().filter(f => !space.members.some(m => m.name === f.name));
@@ -1499,8 +1546,13 @@ const App = (() => {
         showToast('All your friends are already in this workspace, or you have no friends added yet!', 'info');
         return;
       }
-      const namesList = friends.map(f => f.name).join(', ');
-      const inviteName = prompt(`Invite a friend to this workspace (choose from: ${namesList}):`);
+      // UX: dropdown picker instead of typing an exact name
+      const inviteName = await uiChoose({
+        title: 'Invite a friend',
+        message: `Pick a friend to invite to <b>${escapeHtml(space.name)}</b>:`,
+        options: friends.map(f => ({ value: f.name, label: f.name + (f.email ? ` — ${f.email}` : '') })),
+        confirmText: 'Send invite'
+      });
       if (inviteName) {
         const found = friends.find(f => f.name.toLowerCase() === inviteName.toLowerCase().trim());
         if (found) {
@@ -1514,18 +1566,23 @@ const App = (() => {
       }
     };
 
-    document.getElementById('shared-space-leave-btn').onclick = () => {
+    document.getElementById('shared-space-leave-btn').onclick = async () => {
       const space = SharedMeta.getById(currentSpaceId);
-      if (space && confirm(`Are you sure you want to leave "${space.name}"?`)) {
-        SharedMeta.delete(currentSpaceId);
-        currentSpaceId = null;
-        showToast(`Left workspace "${space.name}"`, 'info');
-        renderSharedView();
+      if (space && await uiConfirm({ title: `Leave "${escapeHtml(space.name)}"?`, message: 'You can be re-invited later by a member.', confirmText: 'Leave workspace', danger: true, icon: '🚪' })) {
+        try {
+          await SharedMeta.delete(currentSpaceId);
+          currentSpaceId = null;
+          showToast(`Left workspace "${space.name}"`, 'info');
+          renderSharedView();
+        } catch (err) {
+          console.error('Failed to delete/leave space:', err);
+          showToast('Failed to leave workspace: ' + err.message, 'error');
+        }
       }
     };
 
-    document.getElementById('shared-create-folder-btn').onclick = () => {
-      const folderName = prompt('Enter folder name:');
+    document.getElementById('shared-create-folder-btn').onclick = async () => {
+      const folderName = await uiPrompt({ title: 'New folder', label: 'Folder name', placeholder: 'e.g. Semester 5 Notes', confirmText: 'Create' });
       if (folderName && folderName.trim()) {
         const subjects = LS.get('subjects', []);
         const newFolder = {
@@ -1686,109 +1743,11 @@ const App = (() => {
     }, 4000);
   }
 
-  async function seedMockFilesIfEmpty() {
-    try {
-      const files = FileMeta.getAll();
-      if (files && files.length > 0) return;
-
-      console.log("Seeding mock files for study environment...");
-      
-      // 1. Text file
-      const txtId = 'mock_txt';
-      const txtMeta = {
-        id: txtId,
-        name: 'Getting_Started.txt',
-        size: 512,
-        type: 'txt',
-        createdAt: new Date().toISOString()
-      };
-      const txtData = new TextEncoder().encode(
-        `Welcome to ExamOS Study Workspace!\n\n` +
-        `Here is how to test the Tab State Persistence:\n` +
-        `1. Open this text file in the workspace.\n` +
-        `2. Zoom in/out using the floating controls.\n` +
-        `3. Notice the premium glassmorphism tabs and frosted-glass toolbars.\n` +
-        `4. Open another document tab (like a PDF or Slide Deck).\n` +
-        `5. Go back to this tab. The zoom level and scroll position are exactly preserved!\n\n` +
-        `ExamOS is offline-first. All your files are stored locally in your browser.`
-      );
-      FileMeta.save(txtMeta);
-      await FileStore.save({ id: txtId, data: txtData });
-
-      // 2. Image file
-      const imgId = 'mock_img';
-      const imgMeta = {
-        id: imgId,
-        name: 'Anatomy_Diagram.png',
-        size: 70,
-        type: 'image',
-        createdAt: new Date().toISOString()
-      };
-      const imgData = new Uint8Array([
-        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 94, 99, 96, 96, 96, 0, 0, 0, 5, 0, 1, 164, 182, 221, 115, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
-      ]);
-      FileMeta.save(imgMeta);
-      await FileStore.save({ id: imgId, data: imgData });
-
-      // 3. PPTX file
-      const pptId = 'mock_pptx';
-      const pptMeta = {
-        id: pptId,
-        name: 'Exam_Preparation_Slides.pptx',
-        size: 100,
-        type: 'pptx',
-        createdAt: new Date().toISOString()
-      };
-      const pptData = new Uint8Array([80, 75, 3, 4, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-      FileMeta.save(pptMeta);
-      await FileStore.save({ id: pptId, data: pptData });
-
-      // 4. PDF file
-      const pdfId = 'mock_pdf';
-      const pdfMeta = {
-        id: pdfId,
-        name: 'Study_Guide.pdf',
-        size: 500,
-        type: 'pdf',
-        createdAt: new Date().toISOString()
-      };
-      const pdfString = 
-        "%PDF-1.4\n" +
-        "1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj\n" +
-        "2 0 obj <</Type/Pages/Kids[3 0 R]/Count 1>> endobj\n" +
-        "3 0 obj <</Type/Page/Parent 2 0 R/Resources<<>>/MediaBox[0 0 500 800]/Contents 4 0 R>> endobj\n" +
-        "4 0 obj <</Length 22>> stream\n" +
-        "BT /F1 24 Tf Helloworld ET\n" +
-        "endstream\n" +
-        "endobj\n" +
-        "xref\n" +
-        "0 5\n" +
-        "0000000000 65535 f \n" +
-        "0000000009 00000 n \n" +
-        "0000000052 00000 n \n" +
-        "0000000101 00000 n \n" +
-        "0000000201 00000 n \n" +
-        "trailer <</Size 5/Root 1 0 R>>\n" +
-        "startxref\n" +
-        "272\n" +
-        "%%EOF\n";
-      const pdfData = new TextEncoder().encode(pdfString);
-      FileMeta.save(pdfMeta);
-      await FileStore.save({ id: pdfId, data: pdfData });
-
-      console.log("Mock files successfully seeded.");
-    } catch (e) {
-      console.warn("Failed to seed mock files:", e);
-    }
-  }
-
   let bootstrapped = false;
 
   async function bootstrap() {
     if (bootstrapped) return;
     bootstrapped = true;
-
-    await seedMockFilesIfEmpty();
 
     initTheme();
     initNav();

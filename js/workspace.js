@@ -49,11 +49,24 @@ const Workspace = (() => {
 
   function loadState() {
     const saved = LS.get(LS_KEY, null);
-    if (!saved || !saved.tabs || !saved.tabs.length) return false;
+    if (!saved || !saved.tabs || !saved.tabs.length) {
+      tabs = [];
+      activeTabId = null;
+      splitMode = false;
+      splitActiveTabId = null;
+      return false;
+    }
 
-    // Validate that the files still exist
+    // Validate that the files still exist in persistent storage
     const validTabs = saved.tabs.filter(t => FileMeta.getById(t.fileId));
-    if (!validTabs.length) return false;
+    if (!validTabs.length) {
+      tabs = [];
+      activeTabId = null;
+      splitMode = false;
+      splitActiveTabId = null;
+      LS.set(LS_KEY, { tabs: [], activeTabId: null, splitMode: false, splitActiveTabId: null, splitRatio: 0.5 });
+      return false;
+    }
 
     tabs = validTabs.map(t => ({
       id: t.id,
@@ -64,9 +77,13 @@ const Workspace = (() => {
     }));
 
     activeTabId = saved.activeTabId && tabs.find(t => t.id === saved.activeTabId) ? saved.activeTabId : tabs[0].id;
-    splitMode = saved.splitMode || false;
+    splitMode = saved.splitMode && tabs.length >= 2 ? true : false;
     splitActiveTabId = saved.splitActiveTabId && tabs.find(t => t.id === saved.splitActiveTabId) ? saved.splitActiveTabId : null;
     splitRatio = saved.splitRatio || 0.5;
+
+    if (validTabs.length !== saved.tabs.length) {
+      saveState();
+    }
 
     return true;
   }
@@ -161,6 +178,69 @@ const Workspace = (() => {
     splitActiveTabId = null;
     saveState();
     render();
+  }
+
+  /* ── Remove file(s) from workspace when deleted ─────── */
+  function removeFile(fileId) {
+    const tabsToRemove = tabs.filter(t => t.fileId === fileId);
+    if (!tabsToRemove.length) {
+      const saved = LS.get(LS_KEY, null);
+      if (saved && saved.tabs && saved.tabs.some(t => t.fileId === fileId)) {
+        saved.tabs = saved.tabs.filter(t => t.fileId !== fileId);
+        LS.set(LS_KEY, saved);
+      }
+      return;
+    }
+
+    tabsToRemove.forEach(tab => {
+      if (cleanupFns[tab.id]) { cleanupFns[tab.id](); delete cleanupFns[tab.id]; }
+    });
+
+    tabs = tabs.filter(t => t.fileId !== fileId);
+
+    if (activeTabId && !tabs.some(t => t.id === activeTabId)) {
+      activeTabId = tabs.length > 0 ? tabs[0].id : null;
+    }
+    if (splitActiveTabId && !tabs.some(t => t.id === splitActiveTabId)) {
+      splitActiveTabId = tabs.length > 1 ? tabs.find(t => t.id !== activeTabId)?.id || null : null;
+    }
+    if (tabs.length < 2) {
+      splitMode = false;
+      splitActiveTabId = null;
+    }
+
+    saveState();
+    if (typeof App !== 'undefined' && App.getCurrentView && App.getCurrentView() === 'workspace') {
+      render();
+    }
+  }
+
+  function removeFiles(fileIds) {
+    if (!Array.isArray(fileIds) || !fileIds.length) return;
+    const fileIdSet = new Set(fileIds);
+    const tabsToRemove = tabs.filter(t => fileIdSet.has(t.fileId));
+
+    tabsToRemove.forEach(tab => {
+      if (cleanupFns[tab.id]) { cleanupFns[tab.id](); delete cleanupFns[tab.id]; }
+    });
+
+    tabs = tabs.filter(t => !fileIdSet.has(t.fileId));
+
+    if (activeTabId && !tabs.some(t => t.id === activeTabId)) {
+      activeTabId = tabs.length > 0 ? tabs[0].id : null;
+    }
+    if (splitActiveTabId && !tabs.some(t => t.id === splitActiveTabId)) {
+      splitActiveTabId = tabs.length > 1 ? tabs.find(t => t.id !== activeTabId)?.id || null : null;
+    }
+    if (tabs.length < 2) {
+      splitMode = false;
+      splitActiveTabId = null;
+    }
+
+    saveState();
+    if (typeof App !== 'undefined' && App.getCurrentView && App.getCurrentView() === 'workspace') {
+      render();
+    }
   }
 
   /* ── Pin / Unpin ────────────────────────────────────── */
@@ -791,8 +871,8 @@ const Workspace = (() => {
     if (splitBtn) splitBtn.addEventListener('click', toggleSplit);
 
     const closeAllBtn = el('ws-close-all-btn');
-    if (closeAllBtn) closeAllBtn.addEventListener('click', () => {
-      if (tabs.length > 0 && confirm('Close all tabs?')) closeAll();
+    if (closeAllBtn) closeAllBtn.addEventListener('click', async () => {
+      if (tabs.length > 0 && await uiConfirm({ title: 'Close all tabs?', message: `${tabs.length} open tab${tabs.length > 1 ? 's' : ''} will be closed.`, confirmText: 'Close all', danger: true })) closeAll();
     });
 
     // Responsive check
@@ -810,6 +890,8 @@ const Workspace = (() => {
     openFile,
     closeTab,
     closeAll,
+    removeFile,
+    removeFiles,
     toggleSplit,
     getTabs: () => tabs,
     getActiveTabId: () => activeTabId,

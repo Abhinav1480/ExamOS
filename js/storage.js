@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════
    storage.js — User-namespaced IndexedDB + LocalStorage
    All data is isolated per user via Auth.getCurrentUser()
+   Single Source of Truth for Persistent User Data
    ═══════════════════════════════════════════════════════ */
 
 const DB_NAME = 'ExamOS_v2';
@@ -31,31 +32,53 @@ function uid() {
 
 function ukey(key) { return `examos_${uid()}_${key}`; }
 
+function markLocalMutation() {
+  try {
+    localStorage.setItem(ukey('last_local_mutation'), Date.now().toString());
+  } catch (_) {}
+}
+
+function getLastLocalMutation() {
+  try {
+    const val = localStorage.getItem(ukey('last_local_mutation'));
+    return val ? parseInt(val, 10) : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
 /* ── LocalStorage helper (user-scoped) ──────────────── */
 const LS = {
   get(key, fallback = null) {
-    try { const v = localStorage.getItem(ukey(key)); return v !== null ? JSON.parse(v) : fallback; }
-    catch { return fallback; }
+    try {
+      const v = localStorage.getItem(ukey(key));
+      return v !== null ? JSON.parse(v) : fallback;
+    } catch {
+      return fallback;
+    }
   },
   set(key, val) {
     try {
       localStorage.setItem(ukey(key), JSON.stringify(val));
+      markLocalMutation();
       triggerCloudSync();
     } catch (e) {
-      console.warn(e);
+      console.warn('LS.set error:', e);
     }
   },
   remove(key) {
     try {
       localStorage.removeItem(ukey(key));
+      markLocalMutation();
       triggerCloudSync();
     } catch (e) {
-      console.warn(e);
+      console.warn('LS.remove error:', e);
     }
   },
   clearUser() {
     const prefix = `examos_${uid()}_`;
     Object.keys(localStorage).filter(k => k.startsWith(prefix)).forEach(k => localStorage.removeItem(k));
+    markLocalMutation();
   }
 };
 
@@ -65,9 +88,13 @@ const FileStore = {
     const d = await openDB();
     return new Promise((resolve, reject) => {
       const tx = d.transaction('files', 'readwrite');
-      tx.objectStore('files').put({ id: `${uid()}_${fileObj.id}`, data: fileObj.data, userId: uid() });
-      tx.oncomplete = () => resolve();
+      tx.objectStore('files').put({ id: `${uid()}_${fileObj.id}`, localId: fileObj.id, data: fileObj.data, userId: uid() });
+      tx.oncomplete = () => {
+        markLocalMutation();
+        resolve();
+      };
       tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async get(fileId) {
@@ -84,8 +111,27 @@ const FileStore = {
     return new Promise((resolve, reject) => {
       const tx = d.transaction('files', 'readwrite');
       tx.objectStore('files').delete(`${uid()}_${fileId}`);
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        markLocalMutation();
+        resolve();
+      };
       tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
+    });
+  },
+  async deleteMany(fileIds) {
+    if (!Array.isArray(fileIds) || !fileIds.length) return;
+    const d = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = d.transaction('files', 'readwrite');
+      const store = tx.objectStore('files');
+      fileIds.forEach(id => store.delete(`${uid()}_${id}`));
+      tx.oncomplete = () => {
+        markLocalMutation();
+        resolve();
+      };
+      tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async clearUser() {
@@ -100,7 +146,8 @@ const FileStore = {
         if (cursor.value.userId === uid()) cursor.delete();
         cursor.continue();
       };
-      req.onerror = e => reject(e.target.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
     });
   }
 };
@@ -113,10 +160,12 @@ const NoteStore = {
       const tx = d.transaction('notes', 'readwrite');
       tx.objectStore('notes').put({ ...note, id: `${uid()}_${note.localId}`, userId: uid() });
       tx.oncomplete = () => {
+        markLocalMutation();
         triggerCloudSync();
         resolve(note);
       };
       tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async getAll() {
@@ -134,10 +183,12 @@ const NoteStore = {
       const tx = d.transaction('notes', 'readwrite');
       tx.objectStore('notes').delete(`${uid()}_${localId}`);
       tx.oncomplete = () => {
-        triggerCloudSync();
+        markLocalMutation();
+        triggerCloudSync(true);
         resolve();
       };
       tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async clearUser() {
@@ -152,28 +203,45 @@ const NoteStore = {
         if (cursor.value.userId === uid()) cursor.delete();
         cursor.continue();
       };
-      req.onerror = e => reject(e.target.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
     });
   }
 };
 
-/* ── File metadata (lightweight, in LocalStorage) ───── */
+/* ── File metadata (in LocalStorage, synchronized) ──── */
 const FileMeta = {
-  getAll() { return LS.get('files_meta', []); },
-  getById(id) { return this.getAll().find(f => f.id === id) || null; },
+  getAll() {
+    return LS.get('files_meta', []);
+  },
+  getById(id) {
+    return this.getAll().find(f => f.id === id) || null;
+  },
   save(meta) {
     const all = this.getAll().filter(f => f.id !== meta.id);
     all.push(meta);
     LS.set('files_meta', all);
   },
-  delete(id) { LS.set('files_meta', this.getAll().filter(f => f.id !== id)); },
+  delete(id) {
+    LS.set('files_meta', this.getAll().filter(f => f.id !== id));
+  },
+  deleteMany(ids) {
+    if (!Array.isArray(ids) || !ids.length) return;
+    const idSet = new Set(ids);
+    LS.set('files_meta', this.getAll().filter(f => !idSet.has(f.id)));
+  },
+  deleteBySubject(subjectId) {
+    LS.set('files_meta', this.getAll().filter(f => f.subjectId !== subjectId));
+  },
   pin(id) {
     const all = this.getAll();
     const f = all.find(f => f.id === id);
     if (f) { f.pinned = !f.pinned; LS.set('files_meta', all); }
     return f?.pinned;
   },
-  clear() { LS.set('files_meta', []); }
+  clear() {
+    LS.set('files_meta', []);
+  }
 };
 
 /* ── Persistent Courses in IndexedDB ─────────────────── */
@@ -184,8 +252,12 @@ const CourseDB = {
     return new Promise((resolve, reject) => {
       const tx = d.transaction('courses', 'readwrite');
       tx.objectStore('courses').put({ ...course, id: `${uid()}_${course.id}`, localId: course.id, userId: uid() });
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        markLocalMutation();
+        resolve();
+      };
       tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async saveAll(courses) {
@@ -197,8 +269,12 @@ const CourseDB = {
       courses.forEach(c => {
         if (c && c.id) store.put({ ...c, id: `${uid()}_${c.id}`, localId: c.id, userId: uid() });
       });
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        markLocalMutation();
+        resolve();
+      };
       tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async getAll() {
@@ -209,7 +285,10 @@ const CourseDB = {
       req.onsuccess = () => {
         const results = (req.result || [])
           .filter(c => c.userId === uid())
-          .map(c => ({ ...c, id: c.localId || (typeof c.id === 'string' && c.id.startsWith(`${uid()}_`) ? c.id.slice(uid().length + 1) : c.id) }));
+          .map(c => ({
+            ...c,
+            id: c.localId || (typeof c.id === 'string' && c.id.startsWith(`${uid()}_`) ? c.id.slice(uid().length + 1) : c.id)
+          }));
         resolve(results);
       };
       req.onerror = e => reject(e.target.error);
@@ -220,8 +299,12 @@ const CourseDB = {
     return new Promise((resolve, reject) => {
       const tx = d.transaction('courses', 'readwrite');
       tx.objectStore('courses').delete(`${uid()}_${courseId}`);
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        markLocalMutation();
+        resolve();
+      };
       tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async clearUser() {
@@ -236,7 +319,8 @@ const CourseDB = {
         if (cursor.value.userId === uid()) cursor.delete();
         cursor.continue();
       };
-      req.onerror = e => reject(e.target.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
     });
   }
 };
@@ -250,8 +334,12 @@ const LearningLogDB = {
       const tx = d.transaction('learning_logs', 'readwrite');
       const logId = `${uid()}_${log.date}_${log.courseId}`;
       tx.objectStore('learning_logs').put({ ...log, id: logId, userId: uid() });
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        markLocalMutation();
+        resolve();
+      };
       tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async saveAll(logs) {
@@ -266,8 +354,12 @@ const LearningLogDB = {
           store.put({ ...l, id: logId, userId: uid() });
         }
       });
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        markLocalMutation();
+        resolve();
+      };
       tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async getAll() {
@@ -291,7 +383,12 @@ const LearningLogDB = {
         if (cursor.value.userId === uid() && cursor.value.courseId === courseId) cursor.delete();
         cursor.continue();
       };
-      req.onerror = e => reject(e.target.error);
+      tx.oncomplete = () => {
+        markLocalMutation();
+        resolve();
+      };
+      tx.onerror = e => reject(e.target.error);
+      tx.onabort = e => reject(e.target.error || new Error('Transaction aborted'));
     });
   },
   async clearUser() {
@@ -306,7 +403,8 @@ const LearningLogDB = {
         if (cursor.value.userId === uid()) cursor.delete();
         cursor.continue();
       };
-      req.onerror = e => reject(e.target.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
     });
   }
 };
@@ -314,36 +412,35 @@ const LearningLogDB = {
 /* ── Courses & Learning Tracker metadata ─────────────── */
 const CourseStore = {
   getAll() {
-    const primary = LS.get('courses', null);
-    if (Array.isArray(primary) && primary.length > 0) return primary;
-    const backup = LS.get('courses_backup', null);
-    if (Array.isArray(backup) && backup.length > 0) {
-      try { localStorage.setItem(ukey('courses'), JSON.stringify(backup)); } catch (_) {}
-      return backup;
-    }
-    return Array.isArray(primary) ? primary : [];
+    const raw = LS.get('courses', null);
+    if (Array.isArray(raw)) return raw;
+    return [];
   },
-  getById(id) { return this.getAll().find(c => c.id === id) || null; },
-  save(course) {
+  getById(id) {
+    return this.getAll().find(c => c.id === id) || null;
+  },
+  async save(course) {
     if (!course || !course.id) return;
     const all = this.getAll().filter(c => c.id !== course.id);
     all.push(course);
     LS.set('courses', all);
     try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(all)); } catch (_) {}
-    CourseDB.save(course).catch(console.warn);
+    await CourseDB.save(course).catch(console.warn);
   },
-  saveAll(courses) {
+  async saveAll(courses) {
     if (!Array.isArray(courses)) return;
     LS.set('courses', courses);
     try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(courses)); } catch (_) {}
-    CourseDB.saveAll(courses).catch(console.warn);
+    await CourseDB.saveAll(courses).catch(console.warn);
   },
-  delete(id) {
+  async delete(id) {
     const remaining = this.getAll().filter(c => c.id !== id);
     LS.set('courses', remaining);
     try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(remaining)); } catch (_) {}
-    CourseDB.delete(id).catch(console.warn);
-    LearningLogStore.deleteForCourse(id);
+    await CourseDB.delete(id).catch(console.warn);
+    await LearningLogStore.deleteForCourse(id);
+    markLocalMutation();
+    triggerCloudSync(true);
   },
   updatePosition(id, position, furthest = null, skipCloudSync = false) {
     const all = this.getAll();
@@ -370,33 +467,18 @@ const CourseStore = {
   },
   async init() {
     try {
+      const stored = LS.get('courses', null);
+      if (stored !== null && Array.isArray(stored)) {
+        // LocalStorage is initialized and authoritative. Keep CourseDB in sync.
+        return;
+      }
+      // If LocalStorage was never set, try hydrating from IndexedDB
       const dbCourses = await CourseDB.getAll();
-      const lsCourses = this.getAll();
-      
       if (dbCourses && dbCourses.length > 0) {
-        const merged = [...lsCourses];
-        let changed = false;
-        dbCourses.forEach(dbc => {
-          const idx = merged.findIndex(c => c.id === dbc.id);
-          if (idx === -1) {
-            merged.push(dbc);
-            changed = true;
-          } else {
-            const local = merged[idx];
-            const localTime = new Date(local.lastWatchedAt || local.addedAt || 0).getTime();
-            const dbTime = new Date(dbc.lastWatchedAt || dbc.addedAt || 0).getTime();
-            if (dbTime > localTime || (dbc.playbackPosition || 0) > (local.playbackPosition || 0)) {
-              merged[idx] = { ...local, ...dbc };
-              changed = true;
-            }
-          }
-        });
-        if (changed || merged.length > lsCourses.length) {
-          LS.set('courses', merged);
-          try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(merged)); } catch (_) {}
-        }
-      } else if (lsCourses && lsCourses.length > 0) {
-        await CourseDB.saveAll(lsCourses);
+        LS.set('courses', dbCourses);
+        try { localStorage.setItem(ukey('courses_backup'), JSON.stringify(dbCourses)); } catch (_) {}
+      } else {
+        LS.set('courses', []);
       }
     } catch (e) {
       console.warn("CourseStore.init error:", e);
@@ -443,37 +525,182 @@ const LearningLogStore = {
     }
     LearningLogDB.save(entry).catch(console.warn);
   },
-  deleteForCourse(courseId) {
+  async deleteForCourse(courseId) {
     LS.set('learning_logs', this.getAll().filter(l => l.courseId !== courseId));
-    LearningLogDB.deleteForCourse(courseId).catch(console.warn);
+    await LearningLogDB.deleteForCourse(courseId).catch(console.warn);
+    markLocalMutation();
   },
   async init() {
     try {
+      const stored = LS.get('learning_logs', null);
+      if (stored !== null && Array.isArray(stored)) {
+        return;
+      }
       const dbLogs = await LearningLogDB.getAll();
-      const lsLogs = this.getAll();
       if (dbLogs && dbLogs.length > 0) {
-        const merged = [...lsLogs];
-        let changed = false;
-        dbLogs.forEach(dbl => {
-          const idx = merged.findIndex(l => l.date === dbl.date && l.courseId === dbl.courseId);
-          if (idx === -1) {
-            merged.push(dbl);
-            changed = true;
-          } else {
-            if ((dbl.secondsWatched || 0) > (merged[idx].secondsWatched || 0)) {
-              merged[idx].secondsWatched = dbl.secondsWatched;
-              changed = true;
-            }
-          }
-        });
-        if (changed || merged.length > lsLogs.length) {
-          LS.set('learning_logs', merged);
-        }
-      } else if (lsLogs && lsLogs.length > 0) {
-        await LearningLogDB.saveAll(lsLogs);
+        LS.set('learning_logs', dbLogs);
+      } else {
+        LS.set('learning_logs', []);
       }
     } catch (e) {
       console.warn("LearningLogStore.init error:", e);
+    }
+  }
+};
+
+/* ── Centralized Subject Store with Cascade Deletion ─── */
+const SubjectStore = {
+  getAll() {
+    return LS.get('subjects', []) || [];
+  },
+  getPersonal() {
+    return this.getAll().filter(s => !s.spaceId);
+  },
+  getById(id) {
+    return this.getAll().find(s => s.id === id) || null;
+  },
+  save(subject) {
+    const all = this.getAll().filter(s => s.id !== subject.id);
+    all.push(subject);
+    LS.set('subjects', all);
+    markLocalMutation();
+    triggerCloudSync(true);
+  },
+  rename(id, newName) {
+    const all = this.getAll();
+    const s = all.find(sub => sub.id === id);
+    if (!s) return false;
+    s.name = newName;
+    LS.set('subjects', all);
+    markLocalMutation();
+    triggerCloudSync(true);
+    return true;
+  },
+  toggleFavorite(id) {
+    const all = this.getAll();
+    const s = all.find(sub => sub.id === id);
+    if (!s) return false;
+    s.favorite = !s.favorite;
+    LS.set('subjects', all);
+    markLocalMutation();
+    triggerCloudSync(true);
+    return s.favorite;
+  },
+  togglePin(id) {
+    const all = this.getAll();
+    const s = all.find(sub => sub.id === id);
+    if (!s) return false;
+    s.pinned = !s.pinned;
+    LS.set('subjects', all);
+    markLocalMutation();
+    triggerCloudSync(true);
+    return s.pinned;
+  },
+  async delete(id, cascadeFiles = true) {
+    // 1. Remove subject from subjects list
+    const remainingSubjects = this.getAll().filter(s => s.id !== id);
+    LS.set('subjects', remainingSubjects);
+
+    // 2. Cascade delete files if required
+    if (cascadeFiles) {
+      const subjectFiles = FileMeta.getAll().filter(f => f.subjectId === id && !f.spaceId);
+      if (subjectFiles.length > 0) {
+        const fileIds = subjectFiles.map(f => f.id);
+        await FileManager.deleteFiles(fileIds, false);
+      }
+    }
+
+    // 3. Remove subject association from timetable
+    const timetable = (LS.get('timetable', []) || []).map(t => {
+      if (t.subjectId === id) return { ...t, subjectId: '' };
+      return t;
+    });
+    LS.set('timetable', timetable);
+
+    // 4. Remove subject association from exams
+    const exams = (LS.get('exams', []) || []).map(e => {
+      if (e.subjectId === id) return { ...e, subjectId: '' };
+      return e;
+    });
+    LS.set('exams', exams);
+
+    markLocalMutation();
+    triggerCloudSync(true);
+  }
+};
+
+/* ── Centralized File Manager with Atomic Deletion ───── */
+const FileManager = {
+  async deleteFile(fileId, syncImmediately = true) {
+    if (!fileId) return;
+
+    // 1. Delete binary blob from IndexedDB
+    await FileStore.delete(fileId);
+
+    // 2. Delete file metadata from LocalStorage
+    FileMeta.delete(fileId);
+
+    // 3. Close & remove tab from Workspace if currently open
+    if (typeof Workspace !== 'undefined' && Workspace.removeFile) {
+      Workspace.removeFile(fileId);
+    }
+
+    // 4. Close Viewer modal if this file is currently open
+    if (typeof Viewer !== 'undefined') {
+      if (typeof Viewer.getCurrentFileId === 'function' && Viewer.getCurrentFileId() === fileId) {
+        Viewer.close();
+      }
+    }
+
+    // 5. Remove bookmarks for this file
+    const bookmarks = (LS.get('bookmarks', []) || []).filter(b => b.fileId !== fileId);
+    LS.set('bookmarks', bookmarks);
+
+    // 6. Remove cached scroll position
+    try {
+      localStorage.removeItem(ukey('scroll_' + fileId));
+    } catch (_) {}
+
+    markLocalMutation();
+    if (syncImmediately) {
+      triggerCloudSync(true);
+    }
+  },
+
+  async deleteFiles(fileIds, syncImmediately = true) {
+    if (!Array.isArray(fileIds) || !fileIds.length) return;
+
+    // 1. Delete binary blobs in batch from IndexedDB
+    await FileStore.deleteMany(fileIds);
+
+    // 2. Delete metadata in batch from LocalStorage
+    FileMeta.deleteMany(fileIds);
+
+    // 3. Remove all tabs from Workspace
+    if (typeof Workspace !== 'undefined' && Workspace.removeFiles) {
+      Workspace.removeFiles(fileIds);
+    }
+
+    // 4. Close Viewer modal if viewing any deleted file
+    if (typeof Viewer !== 'undefined') {
+      if (typeof Viewer.getCurrentFileId === 'function' && fileIds.includes(Viewer.getCurrentFileId())) {
+        Viewer.close();
+      }
+    }
+
+    // 5. Remove bookmarks for all deleted files
+    const fileIdSet = new Set(fileIds);
+    const bookmarks = (LS.get('bookmarks', []) || []).filter(b => !fileIdSet.has(b.fileId));
+    LS.set('bookmarks', bookmarks);
+
+    // 6. Remove cached scroll positions
+    fileIds.forEach(id => {
+      try { localStorage.removeItem(ukey('scroll_' + id)); } catch (_) {}
+    });
+
+    markLocalMutation();
+    if (syncImmediately) {
+      triggerCloudSync(true);
     }
   }
 };
@@ -537,11 +764,11 @@ const DataPortability = {
         friends: LS.get('friends', []),
         friend_requests: LS.get('friend_requests', []),
         workspace_tabs: LS.get('workspace_tabs', null),
-        courses: LS.get('courses', []),
-        learning_logs: LS.get('learning_logs', [])
+        courses: CourseStore.getAll(),
+        learning_logs: LearningLogStore.getAll()
       },
       filesMeta: FileMeta.getAll(),
-      notes: notes.map(n => ({ ...n, id: n.localId }))
+      notes: notes.map(n => ({ ...n, id: n.localId || n.id }))
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -564,21 +791,21 @@ const DataPortability = {
     if (s.friends) LS.set('friends', s.friends);
     if (s.friend_requests) LS.set('friend_requests', s.friend_requests);
     if (s.workspace_tabs) LS.set('workspace_tabs', s.workspace_tabs);
-    if (s.courses) LS.set('courses', s.courses);
-    if (s.learning_logs) LS.set('learning_logs', s.learning_logs);
-    if (data.filesMeta) LS.set('files_meta', data.filesMeta);
     if (s.courses && Array.isArray(s.courses)) {
-      CourseStore.saveAll(s.courses);
+      await CourseStore.saveAll(s.courses);
     }
     if (s.learning_logs && Array.isArray(s.learning_logs)) {
       LS.set('learning_logs', s.learning_logs);
-      LearningLogDB.saveAll(s.learning_logs).catch(console.warn);
+      await LearningLogDB.saveAll(s.learning_logs).catch(console.warn);
     }
+    if (data.filesMeta) LS.set('files_meta', data.filesMeta);
     if (data.notes) {
       for (const note of data.notes) {
         await NoteStore.save({ ...note, localId: note.id || note.localId });
       }
     }
+    markLocalMutation();
+    triggerCloudSync(true);
   },
 
   async clearAll() {
@@ -587,6 +814,8 @@ const DataPortability = {
     await NoteStore.clearUser();
     await CourseDB.clearUser();
     await LearningLogDB.clearUser();
+    markLocalMutation();
+    triggerCloudSync(true);
   }
 };
 
@@ -598,14 +827,26 @@ const SharedMeta = {
     const all = this.getAll().filter(s => s.id !== space.id);
     all.push(space);
     LS.set('shared_spaces', all);
+    markLocalMutation();
+    triggerCloudSync(true);
   },
-  delete(id) {
+  async delete(id) {
+    // 1. Remove space
     LS.set('shared_spaces', this.getAll().filter(s => s.id !== id));
-    // Delete folders (subjects) and files associated with this space
+
+    // 2. Cascade delete space files from IndexedDB and LocalStorage
+    const spaceFiles = FileMeta.getAll().filter(f => f.spaceId === id);
+    if (spaceFiles.length > 0) {
+      const fileIds = spaceFiles.map(f => f.id);
+      await FileManager.deleteFiles(fileIds, false);
+    }
+
+    // 3. Delete folders (subjects) associated with this space
     const folders = (LS.get('subjects', []) || []).filter(f => f.spaceId !== id);
     LS.set('subjects', folders);
-    const files = FileMeta.getAll().filter(f => f.spaceId !== id);
-    LS.set('files_meta', files);
+
+    markLocalMutation();
+    triggerCloudSync(true);
   },
   initDefaults() {
     // Keep it clean - no pre-populated default data
@@ -619,27 +860,39 @@ const FriendMeta = {
     const all = this.getAll().filter(f => f.email.toLowerCase() !== friend.email.toLowerCase());
     all.push(friend);
     LS.set('friends', all);
+    markLocalMutation();
+    triggerCloudSync(true);
   },
   delete(email) {
     LS.set('friends', this.getAll().filter(f => f.email.toLowerCase() !== email.toLowerCase()));
+    markLocalMutation();
+    triggerCloudSync(true);
   },
   getRequests() { return LS.get('friend_requests', []); },
   saveRequest(req) {
     const all = this.getRequests().filter(r => r.email.toLowerCase() !== req.email.toLowerCase());
     all.push(req);
     LS.set('friend_requests', all);
+    markLocalMutation();
+    triggerCloudSync(true);
   },
   deleteRequest(email) {
     LS.set('friend_requests', this.getRequests().filter(r => r.email.toLowerCase() !== email.toLowerCase()));
+    markLocalMutation();
+    triggerCloudSync(true);
   },
   getInvitations() { return LS.get('space_invitations', []); },
   saveInvitation(inv) {
     const all = this.getInvitations().filter(i => i.id !== inv.id);
     all.push(inv);
     LS.set('space_invitations', all);
+    markLocalMutation();
+    triggerCloudSync(true);
   },
   deleteInvitation(id) {
     LS.set('space_invitations', this.getInvitations().filter(i => i.id !== id));
+    markLocalMutation();
+    triggerCloudSync(true);
   },
   initDefaults() {
     // Keep it clean - no pre-populated default data
@@ -711,9 +964,13 @@ function stripHtml(html) {
 
 function showToast(message, type = 'info', duration = 3500) {
   const container = document.getElementById('toasts');
+  if (!container) return;
   const icons = { success:'✅', error:'❌', warning:'⚠️', info:'ℹ️' };
+  while (container.children.length >= 4) container.firstElementChild.remove();
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
   toast.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span>${escapeHtml(message)}</span>`;
   container.appendChild(toast);
   setTimeout(() => {
@@ -807,9 +1064,10 @@ const CloudSync = {
 
     try {
       const notes = await NoteStore.getAll();
+      const syncTimestamp = new Date().toISOString();
       const syncPayload = {
         version: 2,
-        syncedAt: new Date().toISOString(),
+        syncedAt: syncTimestamp,
         userId: user.id,
         settings: {
           subjects: LS.get('subjects', []),
@@ -827,7 +1085,7 @@ const CloudSync = {
           learning_logs: LearningLogStore.getAll()
         },
         filesMeta: FileMeta.getAll(),
-        notes: notes.map(n => ({ ...n, id: n.localId }))
+        notes: notes.map(n => ({ ...n, id: n.localId || n.id }))
       };
 
       const encrypted = encryptPayload(JSON.stringify(syncPayload), user.id);
@@ -836,17 +1094,17 @@ const CloudSync = {
       const res = await fetch(`https://mantledb.sh/v2/examos_data_v2/${emailHash}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: encrypted, syncedAt: syncPayload.syncedAt })
+        body: JSON.stringify({ data: encrypted, syncedAt: syncTimestamp })
       });
 
-      if (!res.ok) throw new Error('Cloud KV storage returned ' + res.status);
+      if (!res.ok) throw new Error('Cloud storage returned ' + res.status);
 
-      localStorage.setItem(`examos_${user.id}_last_sync`, syncPayload.syncedAt);
+      localStorage.setItem(`examos_${user.id}_last_sync`, syncTimestamp);
       this.updateSyncUI('synced');
       
       const lastSyncLabel = document.getElementById('settings-last-sync');
       if (lastSyncLabel) {
-        lastSyncLabel.textContent = `Last synced: ${new Date(syncPayload.syncedAt).toLocaleString()}`;
+        lastSyncLabel.textContent = `Last synced: ${new Date(syncTimestamp).toLocaleString()}`;
       }
     } catch (e) {
       console.warn("Could not sync data to cloud:", e);
@@ -858,6 +1116,21 @@ const CloudSync = {
     if (!user) user = Auth.getCurrentUser();
     if (!user || !this.isEnabled()) return;
 
+    // Check if this device has active local data/mutations
+    const hasLocalSubjects = (LS.get('subjects', null) !== null);
+    const hasLocalFiles = (LS.get('files_meta', null) !== null);
+    const hasLocalCourses = (LS.get('courses', null) !== null);
+    const hasLocalData = hasLocalSubjects || hasLocalFiles || hasLocalCourses;
+    const lastLocalMutation = getLastLocalMutation();
+    const lastSyncTime = this.getLastSync() ? new Date(this.getLastSync()).getTime() : 0;
+
+    // If local has mutations newer than last sync, do not pull from stale cloud! Push instead.
+    if (hasLocalData && lastLocalMutation > lastSyncTime) {
+      console.log("Local workspace has newer modifications. Pushing authoritative state to cloud.");
+      await this.push();
+      return;
+    }
+
     this.updateSyncUI('syncing');
 
     try {
@@ -865,13 +1138,21 @@ const CloudSync = {
       const res = await fetch(`https://mantledb.sh/v2/examos_data_v2/${emailHash}`);
       if (res.status === 404) {
         console.log("No cloud sync backup found for this user.");
-        this.updateSyncUI('synced', 'Synced (Empty)');
+        this.updateSyncUI('synced', 'Synced');
         return;
       }
-      if (!res.ok) throw new Error('Cloud KV storage returned ' + res.status);
+      if (!res.ok) throw new Error('Cloud storage returned ' + res.status);
 
       const wrapper = await res.json();
       if (!wrapper || !wrapper.data) return;
+
+      const cloudSyncTime = wrapper.syncedAt ? new Date(wrapper.syncedAt).getTime() : 0;
+
+      // If this device already has local data and cloud isn't newer, keep local state
+      if (hasLocalData && cloudSyncTime <= lastSyncTime) {
+        this.updateSyncUI('synced');
+        return;
+      }
 
       const decryptedStr = decryptPayload(wrapper.data, user.id);
       const payload = JSON.parse(decryptedStr);
@@ -879,75 +1160,44 @@ const CloudSync = {
       if (payload && payload.settings) {
         const s = payload.settings;
         
-        // 1. Safe Non-Destructive Merge for Courses
-        const localCourses = CourseStore.getAll();
-        const cloudCourses = Array.isArray(s.courses) ? s.courses : [];
-        const mergedCourses = [...localCourses];
-        let coursesChanged = false;
-
-        cloudCourses.forEach(cloudCourse => {
-          if (!cloudCourse || !cloudCourse.id) return;
-          const idx = mergedCourses.findIndex(c => c.id === cloudCourse.id);
-          if (idx === -1) {
-            mergedCourses.push(cloudCourse);
-            coursesChanged = true;
-          } else {
-            const local = mergedCourses[idx];
-            const localTime = new Date(local.lastWatchedAt || local.addedAt || 0).getTime();
-            const cloudTime = new Date(cloudCourse.lastWatchedAt || cloudCourse.addedAt || 0).getTime();
-            if (cloudTime > localTime || (cloudCourse.playbackPosition || 0) > (local.playbackPosition || 0)) {
-              mergedCourses[idx] = { ...local, ...cloudCourse };
-              coursesChanged = true;
-            }
-          }
-        });
-        CourseStore.saveAll(mergedCourses);
-
-        // 2. Safe Merge for Learning Logs
-        const localLogs = LearningLogStore.getAll();
-        const cloudLogs = Array.isArray(s.learning_logs) ? s.learning_logs : [];
-        const mergedLogs = [...localLogs];
-
-        cloudLogs.forEach(cloudLog => {
-          if (!cloudLog || !cloudLog.courseId) return;
-          const idx = mergedLogs.findIndex(l => l.date === cloudLog.date && l.courseId === cloudLog.courseId);
-          if (idx === -1) {
-            mergedLogs.push(cloudLog);
-          } else {
-            mergedLogs[idx].secondsWatched = Math.max(mergedLogs[idx].secondsWatched || 0, cloudLog.secondsWatched || 0);
-          }
-        });
-        LS.set('learning_logs', mergedLogs);
-        LearningLogDB.saveAll(mergedLogs).catch(console.warn);
-
-        // 3. Safe Merge for Subjects
-        if (s.subjects && Array.isArray(s.subjects) && s.subjects.length > 0) {
-          const localSubjects = LS.get('subjects', []);
-          const mergedSubjects = [...localSubjects];
-          s.subjects.forEach(sub => {
-            if (!mergedSubjects.some(ls => ls.id === sub.id)) mergedSubjects.push(sub);
-          });
-          localStorage.setItem(`examos_${user.id}_subjects`, JSON.stringify(mergedSubjects));
+        // Authoritative clean restore from cloud on initial device load
+        if (s.courses && Array.isArray(s.courses)) {
+          await CourseStore.saveAll(s.courses);
+        } else if (!hasLocalCourses) {
+          LS.set('courses', []);
         }
 
-        if (s.timetable && Array.isArray(s.timetable) && s.timetable.length > 0) {
+        if (s.learning_logs && Array.isArray(s.learning_logs)) {
+          LS.set('learning_logs', s.learning_logs);
+          await LearningLogDB.saveAll(s.learning_logs).catch(console.warn);
+        } else if (!hasLocalData) {
+          LS.set('learning_logs', []);
+        }
+
+        if (s.subjects && Array.isArray(s.subjects)) {
+          localStorage.setItem(`examos_${user.id}_subjects`, JSON.stringify(s.subjects));
+        } else if (!hasLocalSubjects) {
+          LS.set('subjects', []);
+        }
+
+        if (s.timetable && Array.isArray(s.timetable)) {
           localStorage.setItem(`examos_${user.id}_timetable`, JSON.stringify(s.timetable));
         }
-        if (s.exams && Array.isArray(s.exams) && s.exams.length > 0) {
+        if (s.exams && Array.isArray(s.exams)) {
           localStorage.setItem(`examos_${user.id}_exams`, JSON.stringify(s.exams));
         }
-        if (s.bookmarks && Array.isArray(s.bookmarks) && s.bookmarks.length > 0) {
+        if (s.bookmarks && Array.isArray(s.bookmarks)) {
           localStorage.setItem(`examos_${user.id}_bookmarks`, JSON.stringify(s.bookmarks));
         }
         if (s.dailyTarget) localStorage.setItem(`examos_${user.id}_daily_target`, JSON.stringify(s.dailyTarget));
-        if (s.studyLog && Array.isArray(s.studyLog) && s.studyLog.length > 0) {
+        if (s.studyLog && Array.isArray(s.studyLog)) {
           localStorage.setItem(`examos_${user.id}_study_log`, JSON.stringify(s.studyLog));
         }
         if (s.theme) localStorage.setItem(`examos_${user.id}_theme`, JSON.stringify(s.theme));
-        if (s.shared_spaces && Array.isArray(s.shared_spaces) && s.shared_spaces.length > 0) {
+        if (s.shared_spaces && Array.isArray(s.shared_spaces)) {
           localStorage.setItem(`examos_${user.id}_shared_spaces`, JSON.stringify(s.shared_spaces));
         }
-        if (s.friends && Array.isArray(s.friends) && s.friends.length > 0) {
+        if (s.friends && Array.isArray(s.friends)) {
           localStorage.setItem(`examos_${user.id}_friends`, JSON.stringify(s.friends));
         }
         if (s.friend_requests && Array.isArray(s.friend_requests)) {
@@ -955,13 +1205,10 @@ const CloudSync = {
         }
         if (s.workspace_tabs) localStorage.setItem(`examos_${user.id}_workspace_tabs`, JSON.stringify(s.workspace_tabs));
 
-        if (payload.filesMeta && Array.isArray(payload.filesMeta) && payload.filesMeta.length > 0) {
-          const localFiles = FileMeta.getAll();
-          const mergedFiles = [...localFiles];
-          payload.filesMeta.forEach(fm => {
-            if (!mergedFiles.some(f => f.id === fm.id)) mergedFiles.push(fm);
-          });
-          localStorage.setItem(`examos_${user.id}_files_meta`, JSON.stringify(mergedFiles));
+        if (payload.filesMeta && Array.isArray(payload.filesMeta)) {
+          localStorage.setItem(`examos_${user.id}_files_meta`, JSON.stringify(payload.filesMeta));
+        } else if (!hasLocalFiles) {
+          LS.set('files_meta', []);
         }
 
         if (payload.notes && payload.notes.length) {
@@ -972,12 +1219,7 @@ const CloudSync = {
 
         localStorage.setItem(`examos_${user.id}_last_sync`, wrapper.syncedAt || new Date().toISOString());
         this.updateSyncUI('synced');
-        console.log("Workspace data pulled and safely merged from the cloud!");
-
-        // If local had courses that cloud didn't have, push the merged state back to cloud
-        if (localCourses.length > cloudCourses.length) {
-          this.push().catch(console.warn);
-        }
+        console.log("Workspace state loaded from cloud!");
       }
     } catch (e) {
       console.warn("Could not pull data from cloud:", e);
@@ -1013,4 +1255,3 @@ function triggerCloudSync(immediate = false) {
     }, 3000);
   }
 }
-

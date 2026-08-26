@@ -103,15 +103,20 @@ const Notes = (() => {
 
   /* ── Delete ──────────────────────────────────────────── */
   async function deleteNote() {
-    if (!currentId || !confirm('Delete this note?')) return;
-    await NoteStore.delete(currentId);
-    allNotes = allNotes.filter(n => n.localId !== currentId);
-    currentId = null;
+    if (!currentId || !(await uiConfirm({ title: 'Delete this note?', message: 'This cannot be undone.', confirmText: 'Delete', danger: true }))) return;
+    try {
+      await NoteStore.delete(currentId);
+      allNotes = allNotes.filter(n => n.localId !== currentId);
+      currentId = null;
 
-    el('notes-editor-empty').classList.remove('hidden');
-    el('notes-editor-active').classList.add('hidden');
-    renderList();
-    showToast('Note deleted', 'info');
+      el('notes-editor-empty').classList.remove('hidden');
+      el('notes-editor-active').classList.add('hidden');
+      renderList();
+      showToast('Note deleted', 'info');
+    } catch (err) {
+      console.error('Failed to delete note:', err);
+      showToast('Failed to delete note: ' + err.message, 'error');
+    }
   }
 
   /* ── Export ──────────────────────────────────────────── */

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=4" />
+  <link rel="stylesheet" href="css/styles.css?v=6" />
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css" />
@@ -232,7 +232,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Upload
         </button>
-        <button class="theme-btn" id="theme-toggle" title="Toggle theme">
+        <button class="theme-btn" id="theme-toggle" title="Toggle theme" aria-label="Toggle color theme">
           <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
           <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
         </button>
@@ -1113,7 +1113,7 @@
 </div><!-- /#app -->
 
 <!-- ─── DOCUMENT VIEWER MODAL ────────────────────────────── -->
-<div class="modal-overlay hidden" id="viewer-modal">
+<div class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="File viewer" id="viewer-modal">
   <div class="viewer-container">
     <div class="viewer-topbar">
       <span class="viewer-filename" id="viewer-filename">Document</span>
@@ -1177,7 +1177,7 @@
 </div>
 
 <!-- ─── UPLOAD MODAL ──────────────────────────────────────── -->
-<div class="modal-overlay hidden" id="upload-modal" style="align-items:center;justify-content:center;">
+<div class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Upload files" id="upload-modal" style="align-items:center;justify-content:center;">
   <div class="modal-card">
     <div class="modal-header">
       <h3>Upload files</h3>
@@ -1222,7 +1222,7 @@
 </div>
 
 <!-- ─── SUBJECT MODAL ─────────────────────────────────────── -->
-<div class="modal-overlay hidden" id="subject-modal" style="align-items:center;justify-content:center;">
+<div class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Subject settings" id="subject-modal" style="align-items:center;justify-content:center;">
   <div class="modal-card" style="max-width:380px;">
     <div class="modal-header">
       <h3>New subject</h3>
@@ -1274,7 +1274,7 @@
 </div>
 
 <!-- ─── SCHEDULE MODAL ────────────────────────────────────── -->
-<div class="modal-overlay hidden" id="sched-modal" style="align-items:center;justify-content:center;">
+<div class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Add to schedule" id="sched-modal" style="align-items:center;justify-content:center;">
   <div class="modal-card" style="max-width:420px;">
     <div class="modal-header">
       <h3 id="sched-modal-title">Add schedule entry</h3>
@@ -1331,7 +1331,7 @@
 </div>
 
 <!-- ─── CREATE SHARED SPACE MODAL ───────────────────────── -->
-<div class="modal-overlay hidden" id="create-space-modal" style="align-items:center;justify-content:center;z-index:200;">
+<div class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Create shared space" id="create-space-modal" style="align-items:center;justify-content:center;z-index:200;">
   <div class="modal-card" style="max-width:400px;">
     <div class="modal-header">
       <h3>Create shared workspace</h3>
@@ -1376,7 +1376,7 @@
 </div>
 
 <!-- ─── JOIN SPACE MODAL ────────────────────────────────── -->
-<div class="modal-overlay hidden" id="join-space-modal" style="align-items:center;justify-content:center;z-index:200;">
+<div class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Join shared space" id="join-space-modal" style="align-items:center;justify-content:center;z-index:200;">
   <div class="modal-card" style="max-width:380px;">
     <div class="modal-header">
       <h3>Join shared workspace</h3>
@@ -1407,7 +1407,7 @@
 </div>
 
 <!-- ─── ADD COURSE MODAL ─────────────────────────────────── -->
-<div class="modal-overlay hidden" id="add-course-modal" style="align-items:center;justify-content:center;z-index:200;">
+<div class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Add course" id="add-course-modal" style="align-items:center;justify-content:center;z-index:200;">
   <div class="modal-card" style="max-width:440px;">
     <div class="modal-header">
       <div style="display:flex;align-items:center;gap:8px;">
@@ -1452,17 +1452,18 @@
 </div>
 
 <!-- ─── TOASTS ────────────────────────────────────────────── -->
-<div id="toasts"></div>
+<div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <!-- ─── SCRIPTS ──────────────────────────────────────────── -->
-<script src="js/auth.js?v=5"></script>
-<script src="js/storage.js?v=5"></script>
-<script src="js/viewer.js?v=5"></script>
-<script src="js/workspace.js?v=5"></script>
-<script src="js/notes.js?v=5"></script>
-<script src="js/pomodoro.js?v=5"></script>
-<script src="js/timetable.js?v=5"></script>
-<script src="js/learning.js?v=5"></script>
-<script src="js/app.js?v=5"></script>
+<script src="js/ux.js?v=6"></script>
+<script src="js/auth.js?v=6"></script>
+<script src="js/storage.js?v=6"></script>
+<script src="js/viewer.js?v=6"></script>
+<script src="js/workspace.js?v=6"></script>
+<script src="js/notes.js?v=6"></script>
+<script src="js/pomodoro.js?v=6"></script>
+<script src="js/timetable.js?v=6"></script>
+<script src="js/learning.js?v=6"></script>
+<script src="js/app.js?v=6"></script>
 </body>
 </html>

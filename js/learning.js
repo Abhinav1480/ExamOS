@@ -1236,15 +1236,18 @@ const Learning = (() => {
     openCourse(newCourse.id);
   }
 
-  function deleteCourse(courseId) {
+  async function deleteCourse(courseId) {
     const course = CourseStore.getById(courseId);
     if (!course) return;
-    if (!confirm(`Delete "${course.title}" from your Learning courses?`)) return;
-    CourseStore.delete(courseId);
-    LearningLogStore.deleteForCourse && LearningLogStore.deleteForCourse(courseId);
-    triggerCloudSync(true);
-    showToast('Course deleted', 'info');
-    renderOverview();
+    if (!(await uiConfirm({ title: 'Delete course?', message: `"${escapeHtml(course.title)}" and its progress will be permanently removed.`, confirmText: 'Delete', danger: true }))) return;
+    try {
+      await CourseStore.delete(courseId);
+      showToast('Course deleted', 'info');
+      renderOverview();
+    } catch (err) {
+      console.error('Failed to delete course:', err);
+      showToast('Failed to delete course: ' + err.message, 'error');
+    }
   }
 
   /* ── Event Bindings & Init ───────────────────────────── */
@@ -1304,8 +1307,8 @@ const Learning = (() => {
     if (speedSelect) speedSelect.onchange = () => {
       if (ytPlayer && ytPlayerReady && ytPlayer.setPlaybackRate) ytPlayer.setPlaybackRate(parseFloat(speedSelect.value));
     };
-    if (resetPosBtn) resetPosBtn.onclick = () => {
-      if (confirm('Restart course from the beginning (00:00)?')) seekToTimestamp(0);
+    if (resetPosBtn) resetPosBtn.onclick = async () => {
+      if (await uiConfirm({ title: 'Restart course?', message: 'Progress will reset to 00:00.', confirmText: 'Restart', icon: '🔄' })) seekToTimestamp(0);
     };
   }
 
