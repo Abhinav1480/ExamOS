@@ -460,3 +460,64 @@
 .view-exit {
   animation: fade-out 0.15s ease both;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   FOCUS STUDIO SPECIFIC ANIMATIONS
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Audio Equalizer Bars ─────────────────────────────────── */
+@keyframes eq-bar-jump-1 {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
+@keyframes eq-bar-jump-2 {
+  0%, 100% { height: 14px; }
+  50% { height: 6px; }
+}
+@keyframes eq-bar-jump-3 {
+  0%, 100% { height: 6px; }
+  50% { height: 18px; }
+}
+@keyframes eq-bar-jump-4 {
+  0%, 100% { height: 16px; }
+  50% { height: 8px; }
+}
+
+/* ── Breathing Sphere Animations ──────────────────────────── */
+@keyframes sphere-inhale-pulse {
+  0% { transform: scale(0.8); box-shadow: 0 0 15px rgba(56, 189, 248, 0.3); }
+  100% { transform: scale(1.35); box-shadow: 0 0 45px rgba(56, 189, 248, 0.75), 0 0 80px rgba(79, 70, 229, 0.4); }
+}
+
+@keyframes sphere-exhale-pulse {
+  0% { transform: scale(1.35); box-shadow: 0 0 45px rgba(56, 189, 248, 0.75), 0 0 80px rgba(79, 70, 229, 0.4); }
+  100% { transform: scale(0.8); box-shadow: 0 0 15px rgba(56, 189, 248, 0.2); }
+}
+
+@keyframes sphere-ring-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.15); opacity: 0.8; }
+}
+
+/* ── Flame Streak Glow ────────────────────────────────────── */
+@keyframes flame-pulse {
+  0%, 100% { transform: scale(1) rotate(-2deg); filter: drop-shadow(0 0 6px #F59E0B); }
+  50% { transform: scale(1.18) rotate(3deg); filter: drop-shadow(0 0 14px #EF4444); }
+}
+
+/* ── Zen Backdrop Float ───────────────────────────────────── */
+@keyframes zen-ambient-flow {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.6;
+  }
+  33% {
+    transform: translate(30px, -25px) scale(1.08);
+    opacity: 0.85;
+  }
+  66% {
+    transform: translate(-25px, 20px) scale(0.95);
+    opacity: 0.7;
+  }
+}
+

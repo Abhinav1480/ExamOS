@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/animations.css?v=1" />
-  <link rel="stylesheet" href="css/particles.css?v=1" />
-  <link rel="stylesheet" href="css/styles.css?v=7" />
+  <link rel="stylesheet" href="css/animations.css?v=2" />
+  <link rel="stylesheet" href="css/particles.css?v=2" />
+  <link rel="stylesheet" href="css/styles.css?v=8" />
   <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf_viewer.min.css" />
@@ -480,76 +480,242 @@
         </div>
       </section>
 
-      <!-- ── FOCUS ───────────────────────────────────────────── -->
+      <!-- ── FOCUS STUDIO ─────────────────────────────────────────── -->
       <section id="view-focus" class="view hidden" style="padding:0;">
-        <div class="focus-view" style="gap:16px;flex-wrap:wrap;align-items:flex-start;padding-top:28px;padding-bottom:28px;">
-          <!-- Timer card -->
-          <div class="pom-card">
-            <div class="pom-mode-tabs">
-              <div class="pom-tab active" data-mode="pomodoro">Focus</div>
-              <div class="pom-tab" data-mode="short">Short break</div>
-              <div class="pom-tab" data-mode="long">Long break</div>
+        <div class="focus-studio-container">
+          <!-- Top Studio Toolbar / Header -->
+          <div class="focus-studio-topbar">
+            <div class="focus-studio-title-group">
+              <div class="focus-live-badge">
+                <span class="pulse-dot"></span>
+                <span>DEEP WORK STUDIO</span>
+              </div>
+              <h2 class="focus-studio-title">Focus Sanctuary</h2>
             </div>
+            
+            <div class="focus-studio-top-actions">
+              <!-- Quick Preset Pills -->
+              <div class="focus-preset-group">
+                <button class="focus-preset-pill active" data-focus="25" data-break="5">25/5 Pomodoro</button>
+                <button class="focus-preset-pill" data-focus="50" data-break="10">50/10 Sprint</button>
+                <button class="focus-preset-pill" data-focus="90" data-break="15">90/15 Deep Dive</button>
+              </div>
 
-            <div class="pom-timer-wrap">
-              <svg class="pom-svg" viewBox="0 0 200 200">
-                <circle cx="100" cy="100" r="88" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
-                <circle id="pom-ring" cx="100" cy="100" r="88" fill="none" stroke="var(--primary)" stroke-width="8"
-                        stroke-dasharray="553" stroke-dashoffset="0" stroke-linecap="round"/>
-              </svg>
-              <div class="pom-timer-display" id="pom-display">25:00</div>
-            </div>
-
-            <div class="pom-session-label" id="pom-label">Focus Time</div>
-
-            <div class="pom-controls">
-              <button class="pom-ctrl-btn" id="pom-reset" title="Reset">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+              <!-- Fullscreen Zen Mode Button -->
+              <button class="btn-zen-mode" id="focus-enter-zen-btn" title="Enter Fullscreen Zen Mode (Press F)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                </svg>
+                <span>Zen Mode</span>
               </button>
-              <button class="pom-start-btn" id="pom-start">Start</button>
-              <button class="pom-ctrl-btn" id="pom-skip" title="Skip">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
-              </button>
-            </div>
-
-            <div class="pom-stats">
-              <div class="pom-stat">
-                <span class="pom-stat-val" id="pom-sessions">0</span>
-                <span class="pom-stat-label">Sessions</span>
-              </div>
-              <div class="pom-stat">
-                <span class="pom-stat-val" id="pom-total-time">0m</span>
-                <span class="pom-stat-label">Total focus</span>
-              </div>
-              <div class="pom-stat">
-                <span class="pom-stat-val" id="pom-streak-display">0</span>
-                <span class="pom-stat-label">Day streak</span>
-              </div>
-            </div>
-
-            <div class="pom-settings" style="margin-top:4px;">
-              <div class="pom-setting">
-                <label class="pom-range-label">Focus <strong id="focus-dur-val">25</strong> min</label>
-                <input class="pom-range" type="range" id="focus-dur" min="15" max="90" step="5" value="25" />
-              </div>
-              <div class="pom-setting">
-                <label class="pom-range-label">Break <strong id="break-dur-val">5</strong> min</label>
-                <input class="pom-range" type="range" id="break-dur" min="1" max="30" step="1" value="5" />
-              </div>
             </div>
           </div>
 
-          <!-- Task card -->
-          <div class="pom-task-card">
-            <h4>Today's focus task</h4>
-            <input class="pom-task-input" id="pom-task" placeholder="What are you studying today?" />
-            <div style="margin-top:16px;">
-              <div class="section-title" style="margin:0 0 10px;">Today's progress</div>
-              <div class="week-bars" id="daily-progress-bars"></div>
+          <!-- Main 3-Column Focus Grid -->
+          <div class="focus-studio-grid">
+
+            <!-- LEFT COLUMN: Ambient Soundscapes & Breathing Coach -->
+            <div class="focus-col focus-col-left">
+              <!-- Ambient Soundboard Card -->
+              <div class="focus-card glass-panel" id="focus-soundboard-container">
+                <!-- Injected by FocusAudio.renderSoundboard -->
+              </div>
+
+              <!-- Guided Box Breathing Card -->
+              <div class="focus-card glass-panel breathing-coach-card">
+                <div class="breathing-card-head">
+                  <div class="breathing-title-wrap">
+                    <span class="breathing-badge">🧘 Mindful Break</span>
+                    <h4>Box Breathing Coach</h4>
+                  </div>
+                  <button class="btn-sm btn-ghost" id="breathing-toggle-btn">Pause</button>
+                </div>
+                <div class="breathing-visual-area">
+                  <div class="breathing-sphere-wrap">
+                    <div class="breathing-sphere" id="breathing-sphere"></div>
+                    <div class="breathing-sphere-ring"></div>
+                  </div>
+                  <div class="breathing-info">
+                    <div class="breathing-phase-text" id="breathing-phase-label">Inhale deeply...</div>
+                    <div class="breathing-countdown" id="breathing-seconds">4s</div>
+                    <p class="breathing-sub">4s Inhale · 4s Hold · 4s Exhale · 4s Hold</p>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            <!-- CENTER COLUMN: 3D Pomodoro Timer & Streak Visualizer -->
+            <div class="focus-col focus-col-center">
+              <div class="pom-card glass-panel">
+                <div class="pom-mode-tabs">
+                  <div class="pom-tab active" data-mode="pomodoro">Focus</div>
+                  <div class="pom-tab" data-mode="short">Short break</div>
+                  <div class="pom-tab" data-mode="long">Long break</div>
+                </div>
+
+                <div class="pom-timer-wrap">
+                  <svg class="pom-svg" viewBox="0 0 200 200">
+                    <circle cx="100" cy="100" r="88" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
+                    <circle id="pom-ring" cx="100" cy="100" r="88" fill="none" stroke="var(--primary)" stroke-width="8"
+                            stroke-dasharray="553" stroke-dashoffset="0" stroke-linecap="round"/>
+                  </svg>
+                  <div class="pom-timer-display" id="pom-display">25:00</div>
+                </div>
+
+                <div class="pom-session-label" id="pom-label">Focus Time</div>
+
+                <div class="pom-controls">
+                  <button class="pom-ctrl-btn" id="pom-reset" title="Reset">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                  </button>
+                  <button class="pom-start-btn" id="pom-start">Start</button>
+                  <button class="pom-ctrl-btn" id="pom-skip" title="Skip">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                  </button>
+                </div>
+
+                <div class="pom-stats">
+                  <div class="pom-stat">
+                    <span class="pom-stat-val" id="pom-sessions">0</span>
+                    <span class="pom-stat-label">Sessions</span>
+                  </div>
+                  <div class="pom-stat">
+                    <span class="pom-stat-val" id="pom-total-time">0m</span>
+                    <span class="pom-stat-label">Total focus</span>
+                  </div>
+                  <div class="pom-stat">
+                    <span class="pom-stat-val" id="pom-streak-display">0</span>
+                    <span class="pom-stat-label">Day streak 🔥</span>
+                  </div>
+                </div>
+
+                <!-- Daily Target Progress Indicator -->
+                <div class="pom-target-bar-wrap">
+                  <div class="pom-target-label-row">
+                    <span>Daily Study Target</span>
+                    <span id="pom-daily-target-pct">0%</span>
+                  </div>
+                  <div class="pom-target-track">
+                    <div class="pom-target-fill" id="pom-daily-target-bar" style="width: 0%;"></div>
+                  </div>
+                </div>
+
+                <!-- Custom Duration Sliders -->
+                <div class="pom-settings">
+                  <div class="pom-setting">
+                    <label class="pom-range-label">Focus <strong id="focus-dur-val">25</strong> min</label>
+                    <input class="pom-range" type="range" id="focus-dur" min="5" max="120" step="5" value="25" />
+                  </div>
+                  <div class="pom-setting">
+                    <label class="pom-range-label">Break <strong id="break-dur-val">5</strong> min</label>
+                    <input class="pom-range" type="range" id="break-dur" min="1" max="30" step="1" value="5" />
+                  </div>
+                </div>
+
+                <!-- Motivational Study Quote Card -->
+                <div class="focus-quote-box">
+                  <svg class="quote-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z"/></svg>
+                  <p class="focus-quote-text" id="focus-motivational-quote">"Focus is a muscle. The more you practice deep work, the stronger it gets."</p>
+                  <span class="focus-quote-author" id="focus-motivational-author">— Cal Newport</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- RIGHT COLUMN: Fleeting Thoughts Scratchpad & Micro-Tasks & Activity -->
+            <div class="focus-col focus-col-right">
+              <!-- Micro-Tasks Checklist -->
+              <div class="focus-card glass-panel micro-goals-card">
+                <div class="micro-goals-header">
+                  <div class="micro-goals-title-wrap">
+                    <span class="micro-badge">🎯 Sprint Goals</span>
+                    <h4>Session Micro-Tasks</h4>
+                  </div>
+                  <span class="micro-goals-count" id="micro-goals-progress-label">0/0 completed</span>
+                </div>
+
+                <div class="micro-goals-progress-track">
+                  <div class="micro-goals-progress-fill" id="micro-goals-progress-fill" style="width: 0%;"></div>
+                </div>
+
+                <div class="micro-goal-input-row">
+                  <input type="text" class="micro-goal-input" id="micro-goal-input" placeholder="Add micro-goal for this session..." />
+                  <button class="btn-primary micro-goal-btn" id="micro-goal-add-btn">Add</button>
+                </div>
+
+                <div class="micro-goals-list" id="micro-goals-list"></div>
+              </div>
+
+              <!-- Fleeting Thoughts / Brain Dump Scratchpad -->
+              <div class="focus-card glass-panel scratchpad-card">
+                <div class="scratchpad-header">
+                  <div class="scratchpad-title-wrap">
+                    <span class="scratchpad-badge">🧠 Brain Dump</span>
+                    <h4>Fleeting Thoughts</h4>
+                  </div>
+                  <div class="scratchpad-actions">
+                    <button class="btn-xs btn-ghost" id="focus-scratch-send-notes" title="Save thoughts as Note">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      Note
+                    </button>
+                    <button class="btn-xs btn-ghost danger" id="focus-scratch-clear" title="Clear scratchpad">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <p class="scratchpad-hint">Got a sudden distracting thought? Jot it here so your mind stays clear.</p>
+                <textarea class="scratchpad-textarea" id="focus-scratchpad" placeholder="e.g. Look up Laplace transform formula, reply to professor's email, check lab schedule..."></textarea>
+              </div>
+
+              <!-- Weekly Progress Overview -->
+              <div class="focus-card glass-panel week-chart-card">
+                <h4>Weekly Focus History</h4>
+                <div class="week-bars" id="daily-progress-bars"></div>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
+
+      <!-- ── FULLSCREEN ZEN FOCUS OVERLAY ──────────────────────────── -->
+      <div id="zen-focus-overlay" class="zen-overlay hidden">
+        <div class="zen-backdrop-glow"></div>
+        <button class="zen-exit-floating-btn" id="zen-exit-btn" title="Exit Zen Mode (Esc)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Exit Zen
+        </button>
+
+        <div class="zen-content">
+          <div class="zen-mode-tabs">
+            <div class="zen-mode-tab active" data-mode="pomodoro">Focus</div>
+            <div class="zen-mode-tab" data-mode="short">Short break</div>
+            <div class="zen-mode-tab" data-mode="long">Long break</div>
+          </div>
+
+          <div class="zen-timer-wrap">
+            <svg class="zen-pom-svg" viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="6"/>
+              <circle id="zen-pom-ring" cx="100" cy="100" r="88" fill="none" stroke="var(--primary)" stroke-width="6"
+                      stroke-dasharray="553" stroke-dashoffset="0" stroke-linecap="round"/>
+            </svg>
+            <div class="zen-timer-display" id="zen-timer-display">25:00</div>
+          </div>
+
+          <div class="zen-session-label" id="zen-session-label">Focus Time</div>
+
+          <div class="zen-controls">
+            <button class="zen-ctrl-btn" id="zen-reset-btn" title="Reset">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+            </button>
+            <button class="zen-start-btn" id="zen-start-btn">Start</button>
+            <button class="zen-ctrl-btn" id="zen-skip-btn" title="Skip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+            </button>
+          </div>
+
+          <div class="zen-footer-tip">Press <kbd>Esc</kbd> to exit fullscreen</div>
+        </div>
+      </div>
 
       <!-- ── SCHEDULE ─────────────────────────────────────────── -->
       <section id="view-schedule" class="view hidden">
@@ -1469,15 +1635,16 @@
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <!-- ─── SCRIPTS ──────────────────────────────────────────── -->
-<script src="js/ux.js?v=7"></script>
-<script src="js/auth.js?v=7"></script>
-<script src="js/storage.js?v=7"></script>
-<script src="js/viewer.js?v=7"></script>
-<script src="js/workspace.js?v=7"></script>
-<script src="js/notes.js?v=7"></script>
-<script src="js/pomodoro.js?v=7"></script>
-<script src="js/timetable.js?v=7"></script>
-<script src="js/learning.js?v=7"></script>
-<script src="js/app.js?v=7"></script>
+<script src="js/ux.js?v=8"></script>
+<script src="js/auth.js?v=8"></script>
+<script src="js/storage.js?v=8"></script>
+<script src="js/viewer.js?v=8"></script>
+<script src="js/workspace.js?v=8"></script>
+<script src="js/notes.js?v=8"></script>
+<script src="js/focus-audio.js?v=8"></script>
+<script src="js/pomodoro.js?v=8"></script>
+<script src="js/timetable.js?v=8"></script>
+<script src="js/learning.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>
