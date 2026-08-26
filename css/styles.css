@@ -2623,7 +2623,7 @@ body.modal-open {
 .pom-controls {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
   margin-bottom: 24px;
 }
 
@@ -3228,7 +3228,7 @@ body.modal-open {
 .zen-controls {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
   margin-bottom: 36px;
 }
 

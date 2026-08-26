@@ -225,13 +225,48 @@ const Pomodoro = (() => {
     else start();
   }
 
+  function adjustTime(minutesDelta) {
+    const deltaSec = minutesDelta * 60;
+
+    if (!isRunning && timeLeft === totalDuration) {
+      if (mode === 'pomodoro') {
+        focusMins = Math.max(1, Math.min(180, focusMins + minutesDelta));
+        const fDurInput = el('focus-dur');
+        if (fDurInput) fDurInput.value = focusMins;
+        const fDurVal = el('focus-dur-val');
+        if (fDurVal) fDurVal.textContent = focusMins;
+      } else if (mode === 'short') {
+        breakMins = Math.max(1, Math.min(60, breakMins + minutesDelta));
+        const bDurInput = el('break-dur');
+        if (bDurInput) bDurInput.value = breakMins;
+        const bDurVal = el('break-dur-val');
+        if (bDurVal) bDurVal.textContent = breakMins;
+      } else if (mode === 'long') {
+        longBreakMins = Math.max(1, Math.min(60, longBreakMins + minutesDelta));
+      }
+      totalDuration = getDuration(mode);
+      timeLeft = totalDuration;
+    } else {
+      // Running or paused midway: adjust remaining time
+      timeLeft = Math.max(60, timeLeft + deltaSec);
+      if (timeLeft > totalDuration) {
+        totalDuration = timeLeft;
+      }
+    }
+
+    updateDisplay();
+    showToast(`${minutesDelta > 0 ? '+' : ''}${minutesDelta} min ${minutesDelta > 0 ? 'added' : 'reduced'}`, 'info');
+  }
+
   function skip() {
     stop();
     onComplete(true);
   }
 
   function onComplete(skipped = false) {
-    playBellSound();
+    if (!skipped) {
+      playBellSound();
+    }
     if (el('pom-start')) el('pom-start').textContent = 'Start';
     if (el('zen-start-btn')) el('zen-start-btn').textContent = 'Start';
 
@@ -249,6 +284,10 @@ const Pomodoro = (() => {
     } else if (mode !== 'pomodoro' && !skipped) {
       showToast('Break over! Ready to focus? 💪', 'info');
       setTimeout(() => setMode('pomodoro'), 1500);
+    } else if (skipped) {
+      const nextMode = mode === 'pomodoro' ? (sessionsToday % 4 === 0 && sessionsToday > 0 ? 'long' : 'short') : 'pomodoro';
+      showToast('Session skipped', 'info');
+      setTimeout(() => setMode(nextMode), 400);
     }
   }
 
@@ -651,7 +690,7 @@ const Pomodoro = (() => {
       });
     });
 
-    // Start / Pause / Reset / Skip (Main)
+    // Start / Pause / Reset / Skip / Adjust (Main)
     const mainStart = el('pom-start');
     if (mainStart) {
       mainStart.addEventListener('click', () => {
@@ -663,6 +702,10 @@ const Pomodoro = (() => {
     if (mainReset) mainReset.addEventListener('click', resetTimer);
     const mainSkip = el('pom-skip');
     if (mainSkip) mainSkip.addEventListener('click', skip);
+    const mainMinus = el('pom-minus');
+    if (mainMinus) mainMinus.addEventListener('click', () => adjustTime(-5));
+    const mainPlus = el('pom-plus');
+    if (mainPlus) mainPlus.addEventListener('click', () => adjustTime(5));
 
     // Zen Fullscreen Buttons & Shortcut
     const zenToggleBtn = el('focus-enter-zen-btn');
@@ -681,6 +724,10 @@ const Pomodoro = (() => {
     if (zenReset) zenReset.addEventListener('click', resetTimer);
     const zenSkip = el('zen-skip-btn');
     if (zenSkip) zenSkip.addEventListener('click', skip);
+    const zenMinus = el('zen-minus-btn');
+    if (zenMinus) zenMinus.addEventListener('click', () => adjustTime(-5));
+    const zenPlus = el('zen-plus-btn');
+    if (zenPlus) zenPlus.addEventListener('click', () => adjustTime(5));
 
     // Global Floating Widget buttons
     const globalPlay = el('global-timer-play');
@@ -746,6 +793,7 @@ const Pomodoro = (() => {
     start,
     stop,
     resetTimer,
-    setMode
+    setMode,
+    adjustTime
   };
 })();
