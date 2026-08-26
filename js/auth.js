@@ -238,7 +238,15 @@ const Auth = (() => {
   function showPanel(id) {
     ['panel-login', 'panel-signup', 'panel-forgot'].forEach(p => {
       const el = document.getElementById(p);
-      if (el) el.classList.toggle('hidden', p !== id);
+      if (!el) return;
+      if (p === id) {
+        el.classList.remove('hidden');
+        el.style.animation = 'none';
+        el.offsetHeight; /* trigger reflow */
+        el.style.animation = 'slide-up-fade 0.35s cubic-bezier(0.22, 1, 0.36, 1) both';
+      } else {
+        el.classList.add('hidden');
+      }
     });
     // Clear errors
     document.querySelectorAll('.auth-global-error').forEach(e => {

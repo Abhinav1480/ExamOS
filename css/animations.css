@@ -1,0 +1,462 @@
+/* ═══════════════════════════════════════════════════════════
+   EXAM OS — Animations Library
+   Centralized keyframes, utility classes, and motion system
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Respect user preference ──────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   KEYFRAMES
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Entrance: Slide up + fade ────────────────────────────── */
+@keyframes slide-up-fade {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Entrance: Slide down + fade ──────────────────────────── */
+@keyframes slide-down-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Entrance: Slide in from right ────────────────────────── */
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ── Entrance: Slide in from left ─────────────────────────── */
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ── Entrance: Scale bounce (spring) ──────────────────────── */
+@keyframes scale-bounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+  80% {
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Entrance: Pop in ─────────────────────────────────────── */
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  70% {
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Fade in ──────────────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Fade out ─────────────────────────────────────────────── */
+@keyframes fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* ── Float (gentle bobbing) ───────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25%      { transform: translateY(-8px) rotate(1deg); }
+  50%      { transform: translateY(-4px) rotate(-1deg); }
+  75%      { transform: translateY(-10px) rotate(0.5deg); }
+}
+
+/* ── Pulse glow (breathing) ───────────────────────────────── */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(79, 70, 229, 0.3),
+                0 0 20px rgba(79, 70, 229, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(79, 70, 229, 0.5),
+                0 0 40px rgba(79, 70, 229, 0.2);
+  }
+}
+
+/* ── Pulse ring (pomodoro timer) ──────────────────────────── */
+@keyframes pulse-ring {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4),
+                0 0 20px rgba(79, 70, 229, 0.1);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(79, 70, 229, 0),
+                0 0 30px rgba(79, 70, 229, 0.2);
+    transform: scale(1.01);
+  }
+}
+
+/* ── Breathing scale ──────────────────────────────────────── */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.03); }
+}
+
+/* ── Shimmer sweep ────────────────────────────────────────── */
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+/* ── Gradient shift (background animation) ────────────────── */
+@keyframes gradient-shift {
+  0%   { background-position: 0% 50%; }
+  25%  { background-position: 100% 50%; }
+  50%  { background-position: 100% 0%; }
+  75%  { background-position: 0% 100%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ── Rotate (slow spin) ───────────────────────────────────── */
+@keyframes rotate-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Border glow trace ────────────────────────────────────── */
+@keyframes border-glow {
+  0%, 100% {
+    border-color: rgba(79, 70, 229, 0.2);
+  }
+  50% {
+    border-color: rgba(79, 70, 229, 0.5);
+  }
+}
+
+/* ── Count up (for stat numbers) ──────────────────────────── */
+@keyframes count-fade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Wiggle (attention) ───────────────────────────────────── */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  15%      { transform: rotate(-3deg); }
+  30%      { transform: rotate(3deg); }
+  45%      { transform: rotate(-2deg); }
+  60%      { transform: rotate(2deg); }
+  75%      { transform: rotate(-1deg); }
+}
+
+/* ── Ripple (click feedback) ──────────────────────────────── */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* ── Slide active indicator ───────────────────────────────── */
+@keyframes slide-indicator {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+/* ── Stroke draw (SVG) ────────────────────────────────────── */
+@keyframes stroke-draw {
+  from { stroke-dashoffset: 100%; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* ── Toast slide-in ───────────────────────────────────────── */
+@keyframes toast-in {
+  0% {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+  }
+  60% {
+    transform: translateX(-4px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* ── Toast slide-out ──────────────────────────────────────── */
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+  }
+}
+
+/* ── Drain (progress bar) ─────────────────────────────────── */
+@keyframes drain {
+  from { width: 100%; }
+  to   { width: 0; }
+}
+
+/* ── Morph blob (background decoration) ───────────────────── */
+@keyframes morph-blob {
+  0%, 100% {
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+    transform: rotate(90deg) scale(1.05);
+  }
+  50% {
+    border-radius: 50% 60% 30% 60% / 30% 50% 70% 60%;
+    transform: rotate(180deg) scale(0.98);
+  }
+  75% {
+    border-radius: 60% 30% 50% 40% / 70% 40% 50% 60%;
+    transform: rotate(270deg) scale(1.03);
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   UTILITY CLASSES
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Animate-in with stagger support ──────────────────────── */
+.animate-in {
+  animation: slide-up-fade 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-in-right {
+  animation: slide-in-right 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-in-left {
+  animation: slide-in-left 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-pop {
+  animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-scale {
+  animation: scale-bounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-fade {
+  animation: fade-in 0.35s ease both;
+}
+
+/* ── Stagger delays ───────────────────────────────────────── */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+.stagger-7 { animation-delay: 0.35s; }
+.stagger-8 { animation-delay: 0.4s; }
+.stagger-9 { animation-delay: 0.45s; }
+.stagger-10 { animation-delay: 0.5s; }
+
+/* ── Glassmorphism ────────────────────────────────────────── */
+.glass {
+  background: rgba(26, 29, 39, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .glass {
+  background: rgba(26, 29, 39, 0.6);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+:root .glass {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ── Glow effects ─────────────────────────────────────────── */
+.glow-primary {
+  box-shadow: 0 0 12px rgba(79, 70, 229, 0.3),
+              0 0 30px rgba(79, 70, 229, 0.1);
+}
+
+.glow-accent {
+  box-shadow: 0 0 12px rgba(14, 165, 233, 0.3),
+              0 0 30px rgba(14, 165, 233, 0.1);
+}
+
+.glow-success {
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3),
+              0 0 30px rgba(16, 185, 129, 0.1);
+}
+
+.glow-danger {
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.3),
+              0 0 30px rgba(239, 68, 68, 0.1);
+}
+
+/* ── Hover lift ───────────────────────────────────────────── */
+.hover-lift {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15),
+              0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .hover-lift:hover {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35),
+              0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Hover glow ───────────────────────────────────────────── */
+.hover-glow {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 16px rgba(79, 70, 229, 0.25),
+              0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: rgba(79, 70, 229, 0.3);
+}
+
+/* ── Hover scale ──────────────────────────────────────────── */
+.hover-scale {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hover-scale:hover {
+  transform: scale(1.03);
+}
+
+.hover-scale:active {
+  transform: scale(0.98);
+}
+
+/* ── Float animation ──────────────────────────────────────── */
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* ── Breathing glow ───────────────────────────────────────── */
+.animate-breathe-glow {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* ── Shimmer text/background ──────────────────────────────── */
+.shimmer-bg {
+  background: linear-gradient(
+    110deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.06) 37%,
+    transparent 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2.5s ease-in-out infinite;
+}
+
+[data-theme="dark"] .shimmer-bg {
+  background: linear-gradient(
+    110deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.04) 37%,
+    transparent 63%
+  );
+  background-size: 200% 100%;
+}
+
+/* ── Gradient text ────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #4F46E5, #0EA5E9, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Page transition wrapper ──────────────────────────────── */
+.view-enter {
+  animation: slide-up-fade 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.view-exit {
+  animation: fade-out 0.15s ease both;
+}

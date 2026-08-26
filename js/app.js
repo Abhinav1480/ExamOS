@@ -25,7 +25,16 @@ const App = (() => {
 
     VIEWS.forEach(v => {
       const el = document.getElementById(`view-${v}`);
-      if (el) el.classList.toggle('hidden', v !== view);
+      if (el) {
+        if (v === view) {
+          el.classList.remove('hidden');
+          el.style.animation = 'none';
+          el.offsetHeight; /* trigger reflow */
+          el.style.animation = 'slide-up-fade 0.38s cubic-bezier(0.22, 1, 0.36, 1) both';
+        } else {
+          el.classList.add('hidden');
+        }
+      }
     });
     document.querySelectorAll('.nav-link').forEach(l => l.classList.toggle('active', l.dataset.view === view));
     document.querySelectorAll('.bn-item').forEach(i => i.classList.toggle('active', i.dataset.view === view));
@@ -243,10 +252,11 @@ const App = (() => {
     grid.classList.remove('hidden');
     if (empty) empty.classList.add('hidden');
 
-    grid.innerHTML = subjects.map(s => {
+    grid.innerHTML = subjects.map((s, idx) => {
       const count = FileMeta.getAll().filter(f => f.subjectId === s.id && !f.spaceId).length;
+      const staggerClass = `stagger-${Math.min(idx + 1, 8)}`;
       return `
-        <div class="subject-card" data-id="${s.id}" style="--card-color:${s.color};">
+        <div class="subject-card animate-in ${staggerClass}" data-id="${s.id}" style="--card-color:${s.color};">
           <style>.subject-card[data-id="${s.id}"]::before{background:${s.color};}</style>
           <div class="subject-card-menu">
             <button class="btn-icon danger del-subject" data-id="${s.id}" title="Delete">
@@ -326,15 +336,16 @@ const App = (() => {
     }
     container.classList.remove('hidden');
     if (empty) empty.classList.add('hidden');
-    container.innerHTML = files.map(f => buildFileRow(f)).join('');
+    container.innerHTML = files.map((f, idx) => buildFileRow(f, idx)).join('');
     bindFileRowEvents(container);
   }
 
-  function buildFileRow(f) {
+  function buildFileRow(f, idx = 0) {
     const subj = (LS.get('subjects', []) || []).find(s => s.id === f.subjectId);
     const color = getFileColor(f.type);
+    const staggerClass = `stagger-${Math.min(idx + 1, 8)}`;
     return `
-      <div class="file-row" data-id="${f.id}">
+      <div class="file-row animate-in ${staggerClass}" data-id="${f.id}">
         <div class="file-type-badge" style="background:${color}15;">${getFileIcon(f.type)}</div>
         <div class="file-row-info">
           <div class="file-row-name">${escapeHtml(f.name)}</div>
@@ -668,10 +679,10 @@ const App = (() => {
 
     if (libGrid) {
       grid.className = 'lib-grid';
-      grid.innerHTML = files.map(f => buildLibCard(f)).join('');
+      grid.innerHTML = files.map((f, idx) => buildLibCard(f, idx)).join('');
     } else {
       grid.className = 'lib-list';
-      grid.innerHTML = files.map(f => buildFileRow(f)).join('');
+      grid.innerHTML = files.map((f, idx) => buildFileRow(f, idx)).join('');
     }
 
     grid.querySelectorAll('[data-id]').forEach(card => {
@@ -691,12 +702,13 @@ const App = (() => {
     });
   }
 
-  function buildLibCard(f) {
+  function buildLibCard(f, idx = 0) {
     const color = getFileColor(f.type);
     const subj = (LS.get('subjects', []) || []).find(s => s.id === f.subjectId);
     const isYt = f.type === 'youtube';
+    const staggerClass = `stagger-${Math.min(idx + 1, 8)}`;
     return `
-      <div class="lib-card" data-id="${f.id}">
+      <div class="lib-card animate-in ${staggerClass}" data-id="${f.id}">
         <div class="lib-card-actions">
           <button class="open-ws-btn" data-id="${f.id}" title="Open in Workspace">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="2" y1="12" x2="12" y2="12"/></svg>
